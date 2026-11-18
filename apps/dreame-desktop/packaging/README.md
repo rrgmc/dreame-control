@@ -21,8 +21,8 @@ The [release workflow](../../../.github/workflows/release.yml) then builds the d
 |---|---|---|
 | Windows (x64) | `DreameControl-<v>-windows-x64-setup.exe` | Run it. It installs for the current user, so it needs no administrator rights, and adds a Start menu entry. |
 | Windows (x64) | `DreameControl-<v>-windows-x64.zip` | Unpack it and run `Dreame Control.exe`. |
-| macOS (Apple silicon and Intel) | `DreameControl-<v>-macos-universal.dmg` | Open it and drag Dreame Control to Applications. |
-| macOS | `DreameControl-<v>-macos-universal.zip` | The app alone. |
+| macOS (Apple silicon) | `DreameControl-<v>-macos-arm64.dmg` | Open it and drag Dreame Control to Applications. |
+| macOS (Apple silicon) | `DreameControl-<v>-macos-arm64.zip` | The app alone. |
 | Linux (x86_64) | `DreameControl-<v>-linux-x86_64.AppImage` | `chmod +x` the file, then run it. |
 | Linux (x86_64) | `DreameControl-<v>-linux-x86_64.tar.gz` | The program, its icon and a desktop file. |
 | Android | `dreame-control-<v>.apk` | Open it on the phone and allow the install. It is signed with the release key from the repository secrets listed in the workflow. |
@@ -42,7 +42,7 @@ Each script builds a release binary and writes the packages into `dist/` at the 
 | System | Command | Needs |
 |---|---|---|
 | Windows | `task app:package -- 0.2.0`, or `powershell -File apps/dreame-desktop/packaging/windows/package.ps1 0.2.0` | Inno Setup 6 |
-| macOS | `bash apps/dreame-desktop/packaging/macos/package.sh 0.2.0` | Xcode command line tools, both Rust macOS targets |
+| macOS | `bash apps/dreame-desktop/packaging/macos/package.sh 0.2.0` | Xcode command line tools, the Rust target `aarch64-apple-darwin` |
 | Linux | `bash apps/dreame-desktop/packaging/linux/package.sh 0.2.0` | `curl`, and the libraries listed in the workflow |
 
 ## Cost

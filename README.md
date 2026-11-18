@@ -41,7 +41,7 @@ Download the newest version from the [releases page](https://github.com/rrgmc/dr
 |---|---|---|
 | Windows (x64) | `DreameControl-<version>-windows-x64-setup.exe` | Run it. It installs for your user only and needs no administrator rights. |
 | Windows (x64) | `DreameControl-<version>-windows-x64.zip` | Unpack it and run `Dreame Control.exe`. No installation. |
-| macOS (Apple silicon and Intel) | `DreameControl-<version>-macos-universal.dmg` | Open it and drag Dreame Control to Applications. |
+| macOS (Apple silicon) | `DreameControl-<version>-macos-arm64.dmg` | Open it and drag Dreame Control to Applications. |
 | Linux (x86_64) | `DreameControl-<version>-linux-x86_64.AppImage` | Make it executable (`chmod +x`), then run it. |
 | Linux (x86_64) | `DreameControl-<version>-linux-x86_64.tar.gz` | Unpack it. It holds the program, its icon and a desktop file. |
 | Android 8.0 or newer | `dreame-control-<version>.apk` | Open it on the phone and allow the installation. |

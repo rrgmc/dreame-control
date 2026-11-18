@@ -30,7 +30,7 @@ jobs:
             os: windows-latest
           - name: macos
             os: macos-latest
-            targets: aarch64-apple-darwin,x86_64-apple-darwin
+            targets: aarch64-apple-darwin
           - name: linux
             # The oldest supported Ubuntu, so the program runs on older systems too.
             os: ubuntu-22.04
