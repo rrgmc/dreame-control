@@ -8,7 +8,8 @@ Dreame Control, an open replacement for the Dreamehome app: a Rust library for D
 
 - Before the first edit, call `EnterWorktree` (or `git worktree add -b <branch> <dir>`). Name the branch after the task.
 - When you delegate code changes to subagents, start each one with `isolation: "worktree"`. Read-only agents (research, review) may share a checkout.
-- Leave the main checkout on `master`, clean. Merge a worktree's branch into `master` only when the user asks.
+- Leave the main checkout on `master`, clean.
+- `master` is protected: changes reach it only through a pull request that passes CI. When the user asks to merge a worktree's branch, push the branch, open a PR, and merge it once the checks pass. Do not merge into `master` locally.
 - Untracked files that the work needs (`local/env`, `local/refs/`, `local/out/`) live only in the main checkout. Read them from there with an absolute path. Do not copy them into a worktree, and never commit them.
 
 ## Layout
