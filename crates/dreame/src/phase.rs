@@ -13,7 +13,7 @@ use dreame_model::Status;
 pub enum Phase {
     /// No status read yet.
     Unknown,
-    /// Moving and cleaning.
+    /// Moving and cleaning, or driving to a point.
     Cleaning,
     /// A job is paused.
     Paused,
@@ -48,7 +48,8 @@ pub fn phase(s: &Status) -> Phase {
         | S::InitialDeepCleaning
         | S::Sanitizing
         | S::SanitizingWithDry
-        | S::FloorMaintaining => Phase::Cleaning,
+        | S::FloorMaintaining
+        | S::Monitoring => Phase::Cleaning,
         S::Paused
         | S::WashingPaused
         | S::DustBagDryingPaused
@@ -126,6 +127,7 @@ fn task_text(s: &Status) -> Option<String> {
             T::SegmentCleaning => "Cleaning rooms",
             T::SpotCleaning => "Spot cleaning",
             T::FastMapping => "Mapping",
+            T::CruisingPoint => "Going to the point",
             _ => return Some(capitalise(tr(t.label()))),
         })
         .to_string(),
@@ -176,7 +178,10 @@ pub fn notices(before: &Status, after: &Status) -> Vec<Notice> {
     if let (Some(text), true) = (error_text(after), error(after) != error(before)) {
         out.push(Notice { title: tr("The robot needs attention").into(), body: text, good: false });
     }
-    if job_active(before) && !job_active(after) && error(after).is_none() {
+    let went_to_point = matches!(before.task_status, Some(Open::Known(TaskStatus::CruisingPoint | TaskStatus::CruisingPointPaused)));
+    if went_to_point && !job_active(after) && error(after).is_none() {
+        out.push(Notice { title: tr("Go to point finished").into(), body: tr("The robot stopped at the point.").into(), good: true });
+    } else if job_active(before) && !job_active(after) && error(after).is_none() {
         let mut parts = Vec::new();
         if let Some(a) = before.cleaned_area_m2.filter(|a| *a > 0) {
             parts.push(trf("{area} m²", &[("area", &a)]));
@@ -234,6 +239,18 @@ mod tests {
         assert_eq!(phase(&s), Phase::Returning);
         assert_eq!(primary(&s), Primary::Pause);
         assert!(headline(&s).ends_with("(job continues)"), "{}", headline(&s));
+    }
+
+    #[test]
+    fn going_to_a_point() {
+        // State 98 monitoring, task 22 cruising point.
+        let s = status(98, 22, 80, 0);
+        assert_eq!(phase(&s), Phase::Cleaning);
+        assert_eq!(headline(&s), "Going to the point");
+        assert_eq!(primary(&s), Primary::Pause);
+        let n = notices(&s, &status(2, 0, 80, 0));
+        assert_eq!(n.len(), 1);
+        assert_eq!(n[0].title, "Go to point finished");
     }
 
     #[test]

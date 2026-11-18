@@ -2,15 +2,16 @@
 //!
 //! Like other robot vacuum apps, the user picks what to clean (the whole home, rooms tapped on
 //! the map, or a zone drawn on it), sets suction and water, and presses one big button that
-//! starts, pauses or resumes. Stop and Dock ask first while a job runs.
+//! starts, pauses or resumes. Stop and Dock ask first while a job runs. "Go to" sends the robot
+//! to a point clicked on the map, without cleaning.
 
 use crate::backend::{Backend, LoadedMap, Msg, SharedRobot};
-use crate::mapview::{Drag, MapInput, MapView, Overlay};
+use crate::mapview::{Drag, MapInput, MapView, Mark, Overlay};
 use crate::phase::{self, capitalise, Phase, Primary};
 use dreame::control::{CleanOptions, ZONE_DEFAULTS};
 use dreame_i18n::{tr, trf, trn};
 use dreame::live::RobotPose;
-use dreame_map::model::Rect;
+use dreame_map::model::{Point, Rect};
 use dreame_map::path::Path;
 use dreame_model::enums::{CleaningMode, CodeEnum, Open, SuctionLevel, WaterVolume};
 use dreame_model::{Feature, Status};
@@ -23,7 +24,15 @@ pub enum Target {
     Home,
     Rooms,
     Zone,
+    /// Drive to a point and stop there, without cleaning.
+    GoTo,
 }
+
+/// The official app refuses to send the robot to a point below this battery level.
+const GO_TO_MIN_BATTERY: i64 = 15;
+
+/// The size of the go to marker on the map, in mm.
+const GO_TO_MARK_MM: f64 = 350.0;
 
 /// A question before a command that ends the job.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,6 +74,8 @@ pub struct Home {
     target: Target,
     picked: Vec<u32>,
     zone: Option<Rect>,
+    /// Where to send the robot, in world mm.
+    go_to: Option<Point>,
     passes: u32,
     wetness: Option<u8>,
     view: MapView,
@@ -109,6 +120,7 @@ impl Home {
             target: Target::Home,
             picked: Vec::new(),
             zone: None,
+            go_to: None,
             passes: 1,
             wetness: None,
             view: MapView::default(),
@@ -403,7 +415,13 @@ impl Home {
                         picked: if self.target == Target::Rooms { &self.picked } else { &[] },
                         zone: if self.target == Target::Zone { self.zone } else { None },
                         drag: if self.target == Target::Zone { Drag::Rect } else { Drag::Pan },
-                        marks: Vec::new(),
+                        marks: match (self.target, self.go_to) {
+                            (Target::GoTo, Some(center)) => vec![Mark {
+                                shape: dreame::shapes::Shape::Ellipse { center, size: (GO_TO_MARK_MM, GO_TO_MARK_MM) },
+                                colour: crate::ACCENT,
+                            }],
+                            _ => Vec::new(),
+                        },
                         hidden_labels: false,
                     };
                     let input = self.view.show(ui, &l.map, &coloured, &overlay);
@@ -431,6 +449,13 @@ impl Home {
                             // A tap on a room switches to choosing rooms, as in other apps.
                             self.target = Target::Rooms;
                             self.picked = vec![room(p).expect("checked")];
+                        }
+                        MapInput::Click(p) if self.target == Target::GoTo => {
+                            if room(p).is_some() {
+                                self.go_to = Some(p);
+                            } else {
+                                note = Some(tr("Click on the floor of a room.").to_string());
+                            }
                         }
                         MapInput::Rect(a, b) if self.target == Target::Zone => {
                             let z = l.map.snap_to_cells(&Rect::new(a.x.min(b.x), a.y.min(b.y), a.x.max(b.x), a.y.max(b.y)));
@@ -540,7 +565,9 @@ impl Home {
         // What to clean. Fixed while a job runs.
         ui.add_enabled_ui(idle, |ui| {
             ui.horizontal(|ui| {
-                for (t, label) in [(Target::Home, tr("Whole home")), (Target::Rooms, tr("Rooms")), (Target::Zone, tr("Zone"))] {
+                for (t, label) in
+                    [(Target::Home, tr("Whole home")), (Target::Rooms, tr("Rooms")), (Target::Zone, tr("Zone")), (Target::GoTo, tr("Go to"))]
+                {
                     let b = egui::Button::selectable(self.target == t, RichText::new(label).size(15.0)).min_size(egui::vec2(110.0, 30.0));
                     if ui.add(b).clicked() {
                         self.target = t;
@@ -573,6 +600,15 @@ impl Home {
                             self.zone = None;
                         }
                     }
+                    Target::GoTo if self.go_to.is_none() => {
+                        ui.label(RichText::new(tr("Click on the map where the robot should go. It drives there without cleaning.")).weak());
+                    }
+                    Target::GoTo => {
+                        ui.label(tr("The robot drives to the marked point and stops there."));
+                        if ui.small_button(tr("Clear")).clicked() {
+                            self.go_to = None;
+                        }
+                    }
                 }
             });
         });
@@ -584,6 +620,7 @@ impl Home {
         ui.horizontal(|ui| {
             let big = |t: &str| RichText::new(t).size(17.0);
             let primary = phase::primary(&s);
+            let low_battery = s.battery.is_some_and(|b| b < GO_TO_MIN_BATTERY);
             let (icon, label, ready) = match primary {
                 Primary::Pause => ("⏸", tr("Pause"), true),
                 Primary::Resume => ("▶", tr("Resume"), true),
@@ -591,12 +628,19 @@ impl Home {
                     Target::Home => ("▶", tr("Start cleaning"), true),
                     Target::Rooms => ("▶", tr("Clean rooms"), !self.picked.is_empty() && self.map.is_some()),
                     Target::Zone => ("▶", tr("Clean zone"), self.zone.is_some() && self.map.is_some()),
+                    Target::GoTo => ("➡", tr("Go here"), self.go_to.is_some() && self.map.is_some() && !low_battery),
                 },
             };
             let label = format!("{icon}  {label}");
             let fill = crate::ACCENT;
             let b = egui::Button::new(big(&label).color(Color32::WHITE)).fill(fill).min_size(egui::vec2(190.0, 42.0));
-            if ui.add_enabled(ready, b).clicked() {
+            let b = ui.add_enabled(ready, b);
+            let b = if low_battery && primary == Primary::Start && self.target == Target::GoTo {
+                b.on_disabled_hover_text(trf("The battery must be at {percent}% or more.", &[("percent", &GO_TO_MIN_BATTERY)]))
+            } else {
+                b
+            };
+            if b.clicked() {
                 self.primary(backend, primary);
             }
             let side = |t: &str| egui::Button::new(big(t)).min_size(egui::vec2(110.0, 42.0));
@@ -641,6 +685,10 @@ impl Home {
                         let suction = self.status.suction.map(|s| s.code()).or(Some(ZONE_DEFAULTS.1));
                         let opts = CleanOptions { passes, suction, water: None };
                         self.send(backend, tr("Starting the zone"), move |r| async move { r.clean_zone(&map, zone, opts).await });
+                    }
+                    Target::GoTo => {
+                        let Some(p) = self.go_to else { return };
+                        self.send(backend, tr("Sending the robot"), move |r| async move { r.go_to(&map, p).await });
                     }
                 }
             }
@@ -722,7 +770,7 @@ impl Home {
             ui.add_space(10.0);
         }
         // Passes, for rooms and zones; the whole home uses the stored room settings.
-        if self.target != Target::Home && !phase::job_active(&self.status) {
+        if matches!(self.target, Target::Rooms | Target::Zone) && !phase::job_active(&self.status) {
             ui.label(tr("Passes"));
             for n in 1..=3 {
                 ui.selectable_value(&mut self.passes, n, format!("{n}×"));
