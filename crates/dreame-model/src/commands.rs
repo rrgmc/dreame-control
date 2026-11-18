@@ -8,7 +8,7 @@
 
 use crate::codec::cleaning_mode::{CleaningModeGroup, ModePolarity};
 use crate::codec::consumables::Consumable;
-use crate::codec::custom_clean::{rooms_payload, zones_payload, RoomClean, ZoneClean};
+use crate::codec::custom_clean::{goto_payload, rooms_payload, zones_payload, RoomClean, ZoneClean};
 use crate::codec::dnd::DndWindow;
 use crate::codec::station::StationOp;
 use crate::codec::{compact, HhMm};
@@ -103,6 +103,12 @@ pub fn clean_zones(zones: &[ZoneClean]) -> Result<Command> {
         }
     }
     Ok(start_custom(VacuumStatus::ZoneCleaning.code(), Some(zones_payload(zones))))
+}
+
+/// 4.a1 status 23: drive to one point (map millimetres) and stop there. The official app
+/// sends this from its camera page ("point to point"); it does not clean on the way.
+pub fn go_to(x: i64, y: i64) -> Command {
+    start_custom(VacuumStatus::CruisingPoint.code(), Some(goto_payload(x, y)))
 }
 
 /// 4.4: suction level.
@@ -292,6 +298,10 @@ mod tests {
         let (_, input) = action(&zc);
         assert_eq!(input[0]["value"], 19);
         assert!(clean_zones(&[ZoneClean { x1: 0, ..z }]).is_err());
+        let g = go_to(120, -340);
+        let (id, input) = action(&g);
+        assert_eq!(id, ActionId::new(4, 1));
+        assert_eq!(*input, vec![json!({"piid": 1, "value": 23}), json!({"piid": 10, "value": "{\"tpoint\":[[120,-340,0,0]]}"})]);
     }
 
     #[test]

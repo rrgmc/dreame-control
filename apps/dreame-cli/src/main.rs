@@ -288,6 +288,9 @@ enum ControlCmd {
         #[command(flatten)]
         opts: CleanArgs,
     },
+    /// Drive to one point in world mm and stop there, without cleaning (4.a1, status 23).
+    #[command(allow_negative_numbers = true)]
+    GoTo { x: f64, y: f64 },
     /// Wait until the current run ends (docked, paused, error, or stopped) and print how it
     /// ended, with every error and fault code seen. Read-only; follows the live updates.
     Wait {
@@ -1222,6 +1225,7 @@ async fn cmd_control(c: CloudClient, dev: DeviceInfo, action: ControlCmd, apply:
             let zone = dreame_map::model::Rect::new(x0, y0, x1, y1);
             control::clean_zone(&robot.saved_map().await?, zone, opts.into())?
         }
+        ControlCmd::GoTo { x, y } => control::go_to(&robot.saved_map().await?, dreame_map::model::Point::new(x, y))?,
     };
     println!("command: {}", control::describe(&cmd));
     if !apply {
@@ -1678,6 +1682,8 @@ mod tests {
         assert!(Cli::try_parse_from(["dreame", "control", "clean-rooms"]).is_err());
         let c = Cli::try_parse_from(["dreame", "control", "clean-zone", "-500", "0", "500", "1000", "--suction", "2"]).unwrap();
         assert!(matches!(c.cmd, Cmd::Control { action: ControlCmd::CleanZone { x0: -500.0, .. }, apply: false }));
+        let c = Cli::try_parse_from(["dreame", "control", "go-to", "-1200", "350"]).unwrap();
+        assert!(matches!(c.cmd, Cmd::Control { action: ControlCmd::GoTo { x: -1200.0, y: 350.0 }, apply: false }));
     }
 
     #[test]

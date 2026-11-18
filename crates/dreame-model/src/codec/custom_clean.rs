@@ -53,6 +53,11 @@ pub fn spots_payload(points: &[(i64, i64)], repeats: u32, suction: i64, water: i
     compact(&json!({ "points": pts }))
 }
 
+/// `{"tpoint":[[x, y, 0, 0]]}`: one target for a go to point task (status 23).
+pub fn goto_payload(x: i64, y: i64) -> String {
+    compact(&json!({ "tpoint": [[x, y, 0, 0]] }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -69,5 +74,6 @@ mod tests {
         let z = [ZoneClean { x0: -100, y0: 200, x1: 1500, y1: 2600, repeats: 1, suction: 2, water: 2 }];
         assert_eq!(zones_payload(&z), r#"{"areas":[[-100,200,1500,2600,1,2,2]]}"#);
         assert_eq!(spots_payload(&[(10, 20)], 0, 1, 1), r#"{"points":[[10,20,1,1,1]]}"#);
+        assert_eq!(goto_payload(-150, 2400), r#"{"tpoint":[[-150,2400,0,0]]}"#);
     }
 }

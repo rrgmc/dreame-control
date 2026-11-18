@@ -6,10 +6,11 @@
 //! Payloads follow the official app (map-plugin.md, robot control): a room clean is action 4.1
 //! with piid 1 = 18 and piid 10 = `{"selects":[[room, passes, suction, water, 1], ...]}`; a zone
 //! clean is piid 1 = 19 and piid 10 = `{"areas":[[x0, y0, x1, y1, passes, suction, water]]}`.
+//! Go to point is piid 1 = 23 and piid 10 = `{"tpoint":[[x, y, 0, 0]]}`.
 
 use anyhow::{anyhow, bail, Result};
 use dreame_cloud::{CloudClient, DeviceInfo};
-use dreame_map::model::{Map, Rect};
+use dreame_map::model::{Map, Point, Rect};
 use dreame_model::codec::custom_clean::{RoomClean, ZoneClean};
 use dreame_model::commands::{self, Command};
 use serde_json::Value;
@@ -76,6 +77,16 @@ pub fn clean_zone(map: &Map, zone: Rect, o: CleanOptions) -> Result<Command> {
         water: o.water.unwrap_or(w),
     };
     Ok(commands::clean_zones(&[z])?)
+}
+
+/// Sends the robot to one point (world mm) without cleaning. The point must lie on the floor
+/// of a room that is not hidden, so the robot has somewhere to go.
+pub fn go_to(map: &Map, p: Point) -> Result<Command> {
+    let room = map.room_at(p).ok_or_else(|| anyhow!("the point ({:.0}, {:.0}) is not on the floor of a room", p.x, p.y))?;
+    if map.rooms.get(&room).is_some_and(|r| r.hidden) {
+        bail!("the point is in hidden room {room}");
+    }
+    Ok(commands::go_to(p.x.round() as i64, p.y.round() as i64))
 }
 
 /// The command as JSON, for showing before it is sent.
@@ -168,6 +179,15 @@ mod tests {
         assert_eq!(input(&c), json!([{"piid": 1, "value": 19}, {"piid": 10, "value": "{\"areas\":[[0,0,100,50,1,1,2]]}"}]));
         assert!(clean_zone(&m, Rect::new(0.0, 0.0, 0.0, 50.0), CleanOptions::default()).is_err());
         assert!(clean_zone(&m, Rect::new(0.0, 0.0, 5000.0, 50.0), CleanOptions::default()).is_err());
+    }
+
+    #[test]
+    fn go_to_point() {
+        let m = map();
+        let c = go_to(&m, Point::new(60.4, 40.0)).unwrap();
+        assert_eq!(input(&c), json!([{"piid": 1, "value": 23}, {"piid": 10, "value": "{\"tpoint\":[[60,40,0,0]]}"}]));
+        assert!(go_to(&m, Point::new(175.0, 40.0)).is_err(), "hidden room");
+        assert!(go_to(&m, Point::new(5000.0, 40.0)).is_err(), "off the map");
     }
 
     #[test]

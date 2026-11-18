@@ -329,6 +329,12 @@ impl<L: Link> Robot<L> {
         self.send(&control::clean_zone(map, zone, opts)?).await
     }
 
+    /// Sends the robot to one point of `map` (world mm). It drives there without cleaning and
+    /// stops.
+    pub async fn go_to(&self, map: &Map, p: dreame_map::model::Point) -> Result<Value> {
+        self.send(&control::go_to(map, p)?).await
+    }
+
     pub async fn set_suction(&self, level: SuctionLevel) -> Result<Value> {
         self.send(&commands::set_suction(level)).await
     }
