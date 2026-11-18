@@ -1220,7 +1220,7 @@ checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 
 [[package]]
 name = "dreame"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "dreame-cloud",
@@ -1235,7 +1235,7 @@ dependencies = [
 
 [[package]]
 name = "dreame-cli"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1251,7 +1251,7 @@ dependencies = [
 
 [[package]]
 name = "dreame-cloud"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "dreame-core",
  "futures-util",
@@ -1267,7 +1267,7 @@ dependencies = [
 
 [[package]]
 name = "dreame-core"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1276,7 +1276,7 @@ dependencies = [
 
 [[package]]
 name = "dreame-desktop"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1299,7 +1299,7 @@ dependencies = [
 
 [[package]]
 name = "dreame-ffi"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "dreame",
@@ -1314,14 +1314,14 @@ dependencies = [
 
 [[package]]
 name = "dreame-i18n"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "toml",
 ]
 
 [[package]]
 name = "dreame-lab-editor"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "dreame",
@@ -1334,7 +1334,7 @@ dependencies = [
 
 [[package]]
 name = "dreame-map"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "aes",
  "base64 0.22.1",
@@ -1352,7 +1352,7 @@ dependencies = [
 
 [[package]]
 name = "dreame-model"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "dreame-cloud",
  "dreame-core",
@@ -1363,7 +1363,7 @@ dependencies = [
 
 [[package]]
 name = "dreame-mqtt"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "dreame-cloud",
  "dreame-core",
