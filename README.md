@@ -2,103 +2,78 @@
 
 [![CI](https://github.com/rrgmc/dreame-control/actions/workflows/ci.yml/badge.svg)](https://github.com/rrgmc/dreame-control/actions/workflows/ci.yml)
 
-An open replacement for the Dreamehome app: a Rust library for Dreame robot vacuums, with a desktop app (Windows, macOS, Linux), an Android app and a command-line tool on top. The apps are in English and Brazilian Portuguese.
+Dreame Control is an open replacement for the Dreamehome app. It controls Dreame robot vacuums from your computer (Windows, macOS, Linux) or your Android phone. The apps are in English and Brazilian Portuguese.
 
-It talks to the robot through the Dreamehome cloud, with your own Dreamehome account. It can show the live map and status, start and stop cleaning, change settings and schedules, and edit the map (rooms, zones, walls, carpets, furniture).
+The apps talk to the robot through the Dreamehome cloud. You sign in with your own Dreamehome account, the same one the official app uses.
 
-The first and only tested robot is the Dreame L40 Ultra AE (`dreame.vacuum.r2579a`). Other Dreame vacuums use the same cloud and property model and may work in part.
+Dreame Control is also a Rust library that other programs can use. See [RUST.md](RUST.md).
 
-This project is not affiliated with or endorsed by Dreame. Use it at your own risk: commands and map edits change the robot's state.
+> [!WARNING]
+> This project is not affiliated with or endorsed by Dreame. Use it at your own risk: commands and map edits change the robot's state.
 
-- Downloads: [releases](https://github.com/rrgmc/dreame-control/releases) (desktop installers and the Android APK)
-- Research: [docs/research/README.md](docs/research/README.md)
-- Library design: [docs/research/rust-library-design.md](docs/research/rust-library-design.md)
-- Licence: MIT, see [LICENSE](LICENSE)
+## Supported robots
 
-## Crates
+The only tested robot is the Dreame L40 Ultra AE (`dreame.vacuum.r2579a`). Other Dreame vacuums use the same cloud and the same device model, so they may work in part.
 
-| Crate | Content |
-|---|---|
-| `dreame-core` | Shared types: property ids, raw values, device info, errors, app constants |
-| `dreame-i18n` | Translations for the text apps show: language switch and catalogs keyed by the English text (en-US, pt-BR) |
-| `dreame-cloud` | Async Dreamehome cloud client: login, token refresh, devices, property reads, commands, file downloads |
-| `dreame-mqtt` | Live updates from the cloud MQTT broker, with a pinned-root certificate check |
-| `dreame-model` | Property table, value codecs, open enums, capability discovery, typed status, command builders |
-| `dreame-map` | Map codec, P-frame merge, editable map model, PNG renderer, map edit commands, recovery archive edits |
-| `dreame` | Facade for apps: login session, cloud robot access, map edit flow (snapshot, apply, read back) |
-| `dreame-ffi` | UniFFI bindings for Kotlin and Swift |
+## What the apps do
 
-## Apps
+| Feature | Desktop | Android |
+|---|:---:|:---:|
+| Live map with the robot, its dock, the rooms and the cleaning path | Yes | Yes |
+| Clean the whole home, chosen rooms or a zone drawn on the map | Yes | Yes |
+| Start, pause, resume and stop; send the robot to its dock | Yes | Yes |
+| Set suction, water and cleaning mode | Yes | Yes |
+| Room settings: suction, water, passes, mode, cleaning order, hidden rooms | Yes | Yes |
+| Schedules for chosen rooms | Yes | Yes |
+| Robot settings, do-not-disturb hours, station actions | Yes | Yes |
+| Maintenance: remaining life of brushes, filters and pads | Yes | Yes |
+| Cleaning history with the map and path of each job | Yes | Yes |
+| Notifications when a job ends or the robot needs help | Yes | Yes |
+| Map editing: rename, divide and merge rooms; no-go zones, no-mop zones, virtual walls | Yes | No |
+| Drive the robot by hand | Yes | No |
+| Photos of the obstacles and pets the robot recognised | Yes | No |
 
-| App | Content | Run or build |
+## Install
+
+Download the newest version from the [releases page](https://github.com/rrgmc/dreame-control/releases).
+
+| System | File | How to install |
 |---|---|---|
-| `dreame-cli` | The `dreame` command-line tool | `task dreame -- <args>` |
-| `dreame-desktop` | Dreame Control for desktop, the end-user app (`egui`) | `task app`; packages: see [apps/dreame-desktop/packaging/README.md](apps/dreame-desktop/packaging/README.md) |
-| `dreame-android` | Dreame Control for Android, the end-user app (Compose) | `task android` or `task android:release` |
+| Windows (x64) | `DreameControl-<version>-windows-x64-setup.exe` | Run it. It installs for your user only and needs no administrator rights. |
+| Windows (x64) | `DreameControl-<version>-windows-x64.zip` | Unpack it and run `Dreame Control.exe`. No installation. |
+| macOS (Apple silicon and Intel) | `DreameControl-<version>-macos-universal.dmg` | Open it and drag Dreame Control to Applications. |
+| Linux (x86_64) | `DreameControl-<version>-linux-x86_64.AppImage` | Make it executable (`chmod +x`), then run it. |
+| Linux (x86_64) | `DreameControl-<version>-linux-x86_64.tar.gz` | Unpack it. It holds the program, its icon and a desktop file. |
+| Android 8.0 or newer | `dreame-control-<version>.apk` | Open it on the phone and allow the installation. |
 
-The apps are in `apps/`. Both end-user apps are in English and Brazilian Portuguese.
+### The first start
 
-Pushing a version tag runs the release workflow. It builds the desktop packages for Windows, macOS and Linux and the signed Android APK, and attaches them to the GitHub release.
+The packages are not signed with a paid certificate, so each system warns you once:
 
-## Lab tools
+- **Windows:** SmartScreen says "Windows protected your PC". Choose **More info**, then **Run anyway**.
+- **macOS:** right-click the app and choose **Open**. Or open it once, then allow it under **System Settings > Privacy & Security > Open Anyway**.
+- **Android:** the phone asks you to allow installations from the app that opened the APK, such as your browser or file manager.
 
-Lab tools try features against a real robot before they reach the apps. They are in `tools/`.
+## Use
 
-| Tool | Content | Run or build |
-|---|---|---|
-| `dreame-lab-editor` | Lab map editor | `task lab:editor` |
-| `dreame-lab-android` | Android lab app | `task lab:android` |
+1. Open the app and sign in with your Dreamehome email and password. Pick your account's region, or leave it on Automatic on the desktop.
+2. Pick your robot, if the account has more than one.
+3. The app opens on the map of your home. Choose what to clean and press the big button to start.
 
-## The `dreame` tool
+The apps never store your password. They keep a sign-in token, so you stay signed in after a restart. The desktop app keeps its files in your user's app folder: `%APPDATA%` on Windows, `~/Library/Application Support` on macOS and `~/.config` on Linux.
 
-Reading commands change nothing on the robot. Commands that write (`control`, `set`, and the `map` commands that edit, back up or restore) print what they would send and send it only with `--apply`.
+On Android, the app keeps following a running job in the background. It shows the job in a notification and tells you when the job ends or the robot needs help.
 
-Put your account in `local/env` (git-ignored):
+## More
 
-```
-DREAME_USER_EMAIL=you@example.com
-DREAME_PASSWORD=...
-DREAME_REGION=us
-```
+- [BUILDING.md](BUILDING.md): build the apps from source.
+- [RUST.md](RUST.md): the Rust library, the `dreame` command-line tool and the tests.
+- [docs/research/README.md](docs/research/README.md): how the Dreame cloud, the device model and the map format work.
 
-`DREAME_REGION` is optional; without it the tool tries every region. The login saves a refresh token in `local/session.json`, so later commands do not need the password.
+## Licence
 
-```bash
-cargo run -p dreame-cli -- login
-```
+MIT. See [LICENSE](LICENSE).
 
-```bash
-cargo run -p dreame-cli -- devices
-```
+## Author
 
-```bash
-cargo run -p dreame-cli -- props 2.1 3.1
-```
-
-```bash
-cargo run -p dreame-cli -- status
-```
-
-```bash
-cargo run -p dreame-cli -- watch --seconds 600
-```
-
-```bash
-cargo run -p dreame-cli -- map --which saved --out saved.png --floor-plan --names
-```
-
-`props --cached` reads the cloud cache instead of asking the robot. `map --which current` renders the last frame the robot uploaded.
-
-## Tests
-
-```bash
-cargo test --workspace
-```
-
-The [CI workflow](.github/workflows/ci.yml) runs clippy (warnings fail) and the tests on every push to `master` and every pull request, and builds the Android app.
-
-Live tests against the real cloud run only with `DREAME_LIVE=1`. Tests on real captures run only when `DREAME_FIXTURES` points at a folder of captures (`local/out/`).
-
-## Tasks
-
-`Taskfile.yml` wraps the common commands for [go-task](https://taskfile.dev). Run `task --list` to see them. `task check` runs clippy and the tests. `task test:fixtures` and `task test:live` set the variables above. `task dreame -- <args>` runs the tool with any arguments.
+Rangel Reale (realerangel@gmail.com)
