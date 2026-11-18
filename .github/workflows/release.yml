@@ -46,7 +46,7 @@ jobs:
             os: ubuntu-22.04
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -134,7 +134,7 @@ jobs:
         if: matrix.name == 'linux'
         run: bash apps/dreame-desktop/packaging/linux/package.sh "$VERSION"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dreame-control-${{ matrix.name }}
           path: dist/*
@@ -147,7 +147,7 @@ jobs:
       # The NDK the local builds use (task android:libs).
       NDK_VERSION: 28.2.13676358
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -159,7 +159,7 @@ jobs:
         with:
           tool: cargo-ndk
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
@@ -219,7 +219,7 @@ jobs:
           "$APKSIGNER" verify --print-certs "dist/dreame-control-$VERSION.apk" | tee signer.txt
           ! grep -q "CN=Android Debug" signer.txt
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dreame-control-android
           path: dist/*
@@ -230,7 +230,7 @@ jobs:
     needs: [build, android]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
