@@ -269,8 +269,8 @@ pub fn remove_room_edit(map: &Map, room: u32, into: u32) -> Option<GridEdit> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Erase {
     pub edit: GridEdit,
-    /// The rectangle, snapped.
-    pub rect: Rect,
+    /// The rectangle, snapped; `None` for a whole room.
+    pub rect: Option<Rect>,
     /// Floor cells erased per room.
     pub cells: std::collections::BTreeMap<u32, usize>,
     /// Rooms left without floor; the edit deletes them.
@@ -301,7 +301,15 @@ pub fn erase_edit(map: &Map, a: Point, b: Point, snap_mm: f64) -> Option<Erase> 
         return None;
     }
     let emptied = cells.iter().filter(|(r, n)| sizes.get(r) == Some(n)).map(|(r, _)| *r).collect();
-    Some(Erase { edit: GridEdit::Erase { points }, rect, cells, emptied })
+    Some(Erase { edit: GridEdit::Erase { points }, rect: Some(rect), cells, emptied })
+}
+
+/// The erase of every floor cell of `room`, hidden or not. `None` when the room has no cells.
+pub fn erase_room_edit(map: &Map, room: u32) -> Option<Erase> {
+    let id = u8::try_from(room).ok()?;
+    let g = &map.grid;
+    let n = (0..g.height).flat_map(|r| (0..g.width).map(move |c| (c, r))).filter(|&(c, r)| g.get(c, r).class.segment() == Some(id)).count();
+    (n > 0).then(|| Erase { edit: GridEdit::EraseRoom { room: id }, rect: None, cells: [(room, n)].into(), emptied: vec![room] })
 }
 
 /// The full hidden-room list after hiding or showing room `id`, sorted.
@@ -572,6 +580,9 @@ mod tests {
         assert_eq!(all.emptied, [1]);
         assert!(erase_edit(&m, Point::new(1000.0, 1000.0), Point::new(2000.0, 2000.0), 50.0).is_none(), "no floor there");
         assert!(erase_edit(&m, Point::new(0.0, 0.0), Point::new(0.0, 500.0), 50.0).is_none(), "no width");
+        let room = erase_room_edit(&m, 1).unwrap();
+        assert_eq!((room.edit, room.emptied), (GridEdit::EraseRoom { room: 1 }, vec![1]));
+        assert!(erase_room_edit(&m, 2).is_none());
     }
 
     #[test]

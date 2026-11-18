@@ -493,6 +493,22 @@ impl Segmentation {
         Ok(ch)
     }
 
+    /// Erases every cell of `room` ([`Segmentation::erase`]), so `room` leaves the grid.
+    pub fn erase_room(&mut self, room: u8) -> Result<Changes> {
+        let mut cells = Vec::new();
+        for y in 0..self.height {
+            for x in 0..self.width {
+                if room != 0 && self.room_at(x, y) == Some(room) {
+                    cells.push((x, y));
+                }
+            }
+        }
+        if cells.is_empty() {
+            return Err(Error::Unsupported(format!("room {room} is not on the map")));
+        }
+        self.erase(&cells)
+    }
+
     /// The cells of other rooms move to `room`; room-0 cells stay. Refused when a room would lose
     /// every cell.
     fn take_cells(&mut self, room: u8, cells: &[(u32, u32)]) -> Result<Changes> {
@@ -730,6 +746,10 @@ mod tests {
         assert!(s.dirty);
         assert!(s.erase(&[(0, 0), (2, 0)]).is_err(), "no floor cells");
         assert!(s.erase(&[(4, 0)]).is_err(), "the whole floor");
+        let mut s = seg(3, 1, vec![1, 2, 2 | 0x80]);
+        assert_eq!(s.erase_room(2).unwrap().cells, [(1, 0), (2, 0)]);
+        assert!(s.erase_room(2).is_err(), "gone");
+        assert!(s.erase_room(1).is_err(), "the whole floor");
     }
 
     #[test]

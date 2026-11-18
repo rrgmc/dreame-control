@@ -58,8 +58,8 @@ impl Tool {
                  the floor and keeps its name and settings. Saving takes a few minutes.",
             ),
             Tool::Erase => tr(
-                "Drag a rectangle over floor that does not exist. It leaves the map, and a room left \
-                 without floor is deleted. Saving takes a few minutes. This is new: the robot may map \
+                "Drag a rectangle over floor that does not exist, or click a room to erase all of it. \
+                 The floor leaves the map, and a room left without floor is deleted. Saving takes a few minutes. This is new: the robot may map \
                  the area again if it still sees floor there.",
             ),
         }
@@ -527,6 +527,12 @@ impl EditMap {
                     }
                 }
             }
+            (Tool::Erase, MapInput::Click(p)) => {
+                // Hidden rooms too: they are often the floor that does not exist.
+                if let Some(e) = self.map.room_at(p).and_then(|r| shapes::erase_room_edit(&self.map, r)) {
+                    self.stage(Staged::Erase(e));
+                }
+            }
             (Tool::Erase, MapInput::Rect(a, b)) => match shapes::erase_edit(&self.map, a, b, SNAP_MM) {
                 Some(e) => self.stage(Staged::Erase(e)),
                 None => self.problem = Some(tr("There is no floor in that rectangle.").into()),
@@ -635,7 +641,11 @@ impl EditMap {
                 }
             }
             Some(Staged::Grid { line: Some(line), .. }) => marks.push(Mark { shape: Shape::Line(*line), colour: crate::ACCENT }),
-            Some(Staged::Erase(e)) => marks.push(Mark { shape: Shape::Rect(e.rect), colour: Color32::from_rgb(210, 50, 50) }),
+            Some(Staged::Erase(e)) => {
+                if let Some(rect) = e.rect {
+                    marks.push(Mark { shape: Shape::Rect(rect), colour: Color32::from_rgb(210, 50, 50) });
+                }
+            }
             Some(Staged::Grid { line: None, .. }) | None => {}
         }
         marks

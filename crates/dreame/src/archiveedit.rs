@@ -76,7 +76,7 @@ pub fn edit_archive(tbz2: &[u8], edit: &GridEdit) -> Result<(Vec<u8>, Changes, O
         (None, GridEdit::RemoveRoom { room, into }) => {
             Some(Registered::Removed(roomreg::remove_room(&mut a, &s, *room, *into).context("take the room out of the room lists")?))
         }
-        (None, GridEdit::Erase { .. }) => {
+        (None, GridEdit::Erase { .. } | GridEdit::EraseRoom { .. }) => {
             let after = s.room_sizes();
             let gone: Vec<u8> = before.keys().copied().filter(|r| !after.contains_key(r)).collect();
             for r in &gone {
@@ -184,6 +184,9 @@ pub enum GridEdit {
     /// left without cells is taken out of the room lists ([`roomreg::forget_room`]). Not yet
     /// run on a robot: it may rebuild the floor from its occupancy data.
     Erase { points: Vec<(f64, f64)> },
+    /// Erase every cell of `room` and take it out of the room lists, like `Erase`
+    /// ([`Segmentation::erase_room`]).
+    EraseRoom { room: u8 },
 }
 
 impl GridEdit {
@@ -213,6 +216,7 @@ impl GridEdit {
                 let cells = s.cells_at_mm(points);
                 s.erase(&cells)
             }
+            Self::EraseRoom { room } => s.erase_room(*room),
         }
     }
 
@@ -235,6 +239,7 @@ impl GridEdit {
             Self::Split { room, new, .. } | Self::NewRoom { room, new, .. } => vec![*room, *new],
             Self::PaintNewRoom { new, parent, .. } => vec![*parent, *new],
             Self::RemoveRoom { room, into } => vec![*room, *into],
+            Self::EraseRoom { room } => vec![*room],
             Self::Wall { .. } | Self::Erase { .. } => Vec::new(),
         }
     }
@@ -245,6 +250,19 @@ pub fn room_sizes(tbz2: &[u8], rooms: &[u8]) -> Result<String> {
     let a = Archive::decode(tbz2)?;
     let sizes = Segmentation::read(&a)?.room_sizes();
     Ok(rooms.iter().map(|r| format!("room {r} {} cells", sizes.get(r).copied().unwrap_or(0))).collect::<Vec<_>>().join(", "))
+}
+
+/// Every room whose cell count differs between two archives, as `room 9 1234 -> 0 cells, ...`,
+/// or `no room changed size`.
+pub fn changed_rooms(before: &[u8], after: &[u8]) -> Result<String> {
+    let sizes = |b: &[u8]| -> Result<_> { Ok(Segmentation::read(&Archive::decode(b)?)?.room_sizes()) };
+    let (b, a) = (sizes(before)?, sizes(after)?);
+    let mut ids: Vec<u8> = b.keys().chain(a.keys()).copied().collect();
+    ids.sort_unstable();
+    ids.dedup();
+    let n = |m: &std::collections::BTreeMap<u8, usize>, r: u8| m.get(&r).copied().unwrap_or(0);
+    let v: Vec<String> = ids.into_iter().filter(|&r| n(&b, r) != n(&a, r)).map(|r| format!("room {r} {} -> {} cells", n(&b, r), n(&a, r))).collect();
+    Ok(if v.is_empty() { "no room changed size".into() } else { v.join(", ") })
 }
 
 /// Settings for [`apply`].
@@ -513,6 +531,9 @@ pub async fn apply(robot: &CloudRobot, edit: &GridEdit, opts: &Options, progress
     if !edit.rooms().is_empty() {
         progress(&format!("before: {}", room_sizes(&source, &edit.rooms())?));
         progress(&format!("after:  {}", room_sizes(&edited, &edit.rooms())?));
+    }
+    if matches!(edit, GridEdit::Erase { .. } | GridEdit::EraseRoom { .. }) {
+        progress(&format!("rooms changed: {}", changed_rooms(&source, &edited)?));
     }
     let edited_file = file("edited.tbz2");
     std::fs::write(&edited_file, &edited)?;
