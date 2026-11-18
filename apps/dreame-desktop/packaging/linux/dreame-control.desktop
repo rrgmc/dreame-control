@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Dreame Control
+Comment=See the map, start and follow cleaning, edit the map of a Dreame robot vacuum
+Exec=dreame-desktop
+Icon=dreame-control
+Terminal=false
+Categories=Utility;
+StartupWMClass=dreame-control

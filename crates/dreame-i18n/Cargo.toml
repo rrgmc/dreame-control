@@ -1,0 +1,9 @@
+[package]
+name = "dreame-i18n"
+description = "Translations for the text Dreame robot vacuum apps show: a language switch and catalogs keyed by the English text."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+toml = "1"

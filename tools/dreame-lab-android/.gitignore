@@ -1,0 +1,10 @@
+# Built by `task lab:android:libs` from crates/dreame-ffi; never commit them.
+app/src/main/jniLibs/
+app/src/main/java/uniffi/
+.gradle/
+.kotlin/
+build/
+app/build/
+local.properties
+.idea/
+*.iml

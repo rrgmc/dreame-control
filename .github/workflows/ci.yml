@@ -1,0 +1,82 @@
+# Checks every push to master and every pull request: clippy and the tests for the Rust
+# workspace, and a debug build of the Android app. Live and real-capture tests skip themselves,
+# since CI has no account and no captures.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    name: Rust (clippy and tests)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Linux build libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libwayland-dev libgl1-mesa-dev libdbus-1-dev pkg-config
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test --workspace
+
+  android:
+    name: Android (debug build)
+    runs-on: ubuntu-latest
+    env:
+      # The NDK the local builds use (task android:libs).
+      NDK_VERSION: 28.2.13676358
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Android NDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDK_VERSION" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+
+      - name: Rust library and Kotlin bindings
+        run: |
+          cargo ndk -t arm64-v8a -t x86_64 -P 26 -o apps/dreame-android/app/src/main/jniLibs build -p dreame-ffi --lib --release
+          cargo build -q -p dreame-ffi --lib
+          cargo run -q -p dreame-ffi --features bindgen --bin uniffi-bindgen -- generate \
+            --library target/debug/libdreame_ffi.so --language kotlin --no-format \
+            --out-dir apps/dreame-android/app/src/main/java
+
+      - name: Debug APK
+        working-directory: apps/dreame-android
+        run: bash ./gradlew --no-daemon assembleDebug

@@ -1,0 +1,275 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shared -->
+    <string name="try_again">Tentar de novo</string>
+    <string name="cancel">Cancelar</string>
+    <string name="close">Fechar</string>
+    <string name="save">Salvar</string>
+    <string name="delete">Excluir</string>
+    <string name="edit">Editar</string>
+    <string name="undo">Desfazer</string>
+    <string name="clear">Limpar seleção</string>
+    <string name="reset">Redefinir</string>
+    <string name="not_read_yet">Ainda não lido.</string>
+    <string name="cd_back">Voltar ao mapa</string>
+    <string name="percent">%1$d%%</string>
+    <string name="area_m2">%1$d m²</string>
+    <string name="minutes_short">%1$d min</string>
+    <string name="hours_short">%1$d h</string>
+    <string name="hours_minutes">%1$d h %2$d min</string>
+    <string name="progress_done">%1$d%% concluído</string>
+
+    <!-- Start, sign-in and robot choice -->
+    <string name="signing_in">Entrando</string>
+    <string name="connecting_to">Conectando a %1$s</string>
+    <string name="sign_in">Entrar</string>
+    <string name="sign_out">Sair</string>
+    <string name="login_intro">Entre com sua conta Dreamehome.</string>
+    <string name="email">E-mail</string>
+    <string name="password">Senha</string>
+    <string name="account_region">Região da conta</string>
+    <string name="login_privacy">A senha é usada uma vez e não é guardada. O app mantém a sessão somente neste celular.</string>
+    <string name="region_auto">Detectar automaticamente</string>
+    <string name="region_americas">Américas</string>
+    <string name="region_europe">Europa</string>
+    <string name="region_asia_pacific">Ásia-Pacífico</string>
+    <string name="region_china">China</string>
+    <string name="region_russia">Rússia</string>
+    <string name="region_korea">Coreia</string>
+    <string name="region_belarus">Belarus</string>
+    <string name="choose_robot">Escolha um robô</string>
+    <string name="robot_offline">%1$s · offline</string>
+
+    <!-- Errors and messages -->
+    <string name="error_saved_sign_in">Não foi possível usar o login salvo. Entre novamente.</string>
+    <string name="error_sign_in">Não foi possível entrar.\n\n%1$s</string>
+    <string name="error_list_robots">Não foi possível listar os robôs.\n\n%1$s</string>
+    <string name="error_no_robot">Não há nenhum robô aspirador nesta conta.</string>
+    <string name="error_reach_robot">Não foi possível conectar ao robô.\n\n%1$s</string>
+    <string name="error_auth">O login expirou. (%1$s)</string>
+    <string name="error_network">Não foi possível acessar a nuvem da Dreame ou o robô. (%1$s)</string>
+    <string name="error_unsupported">Este robô não tem esse recurso. (%1$s)</string>
+    <string name="error_login_credentials">O e-mail ou a senha está incorreto.</string>
+    <string name="error_login_network">Não foi possível acessar a nuvem da Dreame. Verifique a conexão com a internet.</string>
+    <string name="error_read_robot">Falha ao ler o robô: %1$s</string>
+    <string name="command_failed">%1$s falhou: %2$s</string>
+    <string name="saved_to_robot">Salvo no robô.</string>
+    <string name="notice_text">%1$s: %2$s</string>
+
+    <!-- Notifications -->
+    <string name="channel_alerts_name">Avisos do robô</string>
+    <string name="channel_alerts_description">Uma limpeza concluída, um erro ou um robô que parece preso.</string>
+    <string name="channel_job_name">Limpeza em andamento</string>
+    <string name="channel_job_description">Exibida enquanto o app acompanha uma limpeza em andamento.</string>
+    <string name="job_following">Acompanhando o robô</string>
+
+    <!-- Home screen -->
+    <string name="target_home">Casa toda</string>
+    <string name="target_rooms">Cômodos</string>
+    <string name="target_zone">Zona</string>
+    <string name="mode_vacuum">Aspirar</string>
+    <string name="mode_mop">Passar pano</string>
+    <string name="mode_vacuum_and_mop">Aspirar e passar pano</string>
+    <string name="mode_vacuum_then_mop">Aspirar, depois passar pano</string>
+    <string name="mode_both">Ambos</string>
+    <string name="suction_quiet">Silenciosa</string>
+    <string name="suction_standard">Padrão</string>
+    <string name="suction_strong">Forte</string>
+    <string name="suction_max">Máxima</string>
+    <string name="level_low">Baixa</string>
+    <string name="level_medium">Média</string>
+    <string name="level_high">Alta</string>
+    <string name="cd_battery">Bateria</string>
+    <string name="rooms_title">Cômodos</string>
+    <string name="cd_robot_settings">Configurações do robô</string>
+    <string name="cd_more">Mais</string>
+    <string name="schedules_title">Agendamentos</string>
+    <string name="history_title">Histórico</string>
+    <string name="reload_map">Recarregar o mapa</string>
+    <string name="app_settings">Configurações do app</string>
+    <string name="switch_robot">Trocar de robô</string>
+    <string name="cd_fit_map">Mostrar o mapa inteiro</string>
+    <string name="busy_pausing">Pausando</string>
+    <string name="busy_resuming">Continuando</string>
+    <string name="busy_starting">Iniciando</string>
+    <string name="busy_starting_rooms">Iniciando os cômodos</string>
+    <string name="busy_starting_zone">Iniciando a zona</string>
+    <string name="busy_docking">Voltando à base</string>
+    <string name="busy_finding">Localizando o robô</string>
+    <string name="busy_ending">Encerrando a limpeza</string>
+    <string name="ask_end_title">Encerrar a limpeza?</string>
+    <string name="ask_end_text">A limpeza atual termina. O robô fica onde está.</string>
+    <string name="ask_end_button">Encerrar limpeza</string>
+    <string name="ask_dock_title">Voltar à base?</string>
+    <string name="ask_dock_text">A limpeza atual termina e o robô volta para a base.</string>
+    <string name="ask_dock_button">Voltar à base</string>
+    <string name="hidden_room_note">Esta área cinza está oculta, então o robô não a limpa. Para mostrá-la de novo, ative-a em Cômodos.</string>
+    <string name="link_live">Atualizações ao vivo ativas</string>
+    <string name="link_connecting">Conectando para atualizações ao vivo</string>
+    <string name="link_offline">Sem atualizações ao vivo; o status é lido a cada 20 segundos</string>
+    <string name="map_loading">Carregando o mapa</string>
+    <string name="map_error">Não foi possível carregar o mapa.</string>
+    <string name="map_none">Ainda não há mapa. Inicie uma limpeza para mapear a casa.</string>
+    <string name="status_connecting">Conectando</string>
+    <string name="hint_home">Limpa todos os cômodos na ordem salva.</string>
+    <string name="hint_rooms_empty">Toque nos cômodos no mapa, na ordem em que devem ser limpos.</string>
+    <plurals name="hint_rooms_picked">
+        <item quantity="one">%1$d cômodo: %2$s</item>
+        <item quantity="many">%1$d cômodos: %2$s</item>
+        <item quantity="other">%1$d cômodos: %2$s</item>
+    </plurals>
+    <string name="hint_no_zone">Não há espaço para uma zona aqui; mova o mapa e tente de novo.</string>
+    <string name="hint_zone">Zona de %1$.1f × %2$.1f m. Arraste para mover e arraste o canto para redimensionar.</string>
+    <string name="passes">Passadas</string>
+    <string name="action_pause">Pausar</string>
+    <string name="action_resume">Continuar</string>
+    <string name="action_start">Iniciar limpeza</string>
+    <string name="action_clean_rooms">Limpar cômodos</string>
+    <string name="action_clean_zone">Limpar zona</string>
+    <string name="cd_end_job">Encerrar a limpeza</string>
+    <string name="cd_dock">Mandar o robô voltar à base</string>
+    <string name="cd_find">Localizar o robô</string>
+    <string name="cleaning_settings">Configurações de limpeza</string>
+    <string name="summary_wetness">Água %1$d</string>
+    <string name="summary_water">Água %1$s</string>
+    <string name="per_room_note">Cada cômodo usa as próprias configurações (veja Cômodos). Estas valem para zonas.</string>
+    <string name="section_mode">Modo</string>
+    <string name="section_suction">Sucção</string>
+    <string name="section_mop_wetness">Umidade do mop</string>
+    <string name="section_water">Água</string>
+    <string name="busy_mode">Alterando o modo</string>
+    <string name="busy_suction">Alterando a sucção</string>
+    <string name="busy_wetness">Alterando a umidade</string>
+    <string name="busy_water">Alterando a água</string>
+
+    <!-- App settings -->
+    <string name="notifications">Notificações</string>
+    <string name="notifications_hint">Avisar quando uma limpeza terminar, quando o robô relatar um erro e quando ele parecer preso. Durante uma limpeza, o app continua acompanhando em segundo plano.</string>
+    <string name="sign_out_title">Sair?</string>
+    <string name="sign_out_text">O app esquece a sessão neste celular. O robô continua funcionando como antes.</string>
+
+    <!-- History -->
+    <string name="history_error">Não foi possível ler o histórico.</string>
+    <string name="history_reading">Lendo o histórico</string>
+    <string name="history_empty">Ainda não há limpezas.</string>
+    <string name="unknown_time">Horário desconhecido</string>
+    <string name="cd_show_map">Mostrar o mapa</string>
+    <string name="show_older">Mostrar limpezas anteriores</string>
+    <plurals name="jobs_count">
+        <item quantity="one">%1$d limpeza</item>
+        <item quantity="many">%1$d limpezas</item>
+        <item quantity="other">%1$d limpezas</item>
+    </plurals>
+    <string name="job">Limpeza</string>
+    <string name="job_no_map">O robô não guardou um mapa desta limpeza.</string>
+
+    <!-- Robot settings -->
+    <string name="robot_title">Robô</string>
+    <string name="section_cleaning">Limpeza</string>
+    <string name="section_dnd">Não perturbe</string>
+    <string name="section_obstacles">Desvio de obstáculos</string>
+    <string name="section_station">Base</string>
+    <string name="section_maintenance">Manutenção</string>
+    <string name="carpet_boost">Reforço em tapetes</string>
+    <string name="carpet_boost_hint">Mais sucção nos tapetes.</string>
+    <string name="resume_cleaning">Continuar após recarregar</string>
+    <string name="resume_cleaning_hint">Termina uma limpeza longa depois de carregar.</string>
+    <string name="self_clean">Lavar o mop durante a limpeza</string>
+    <string name="self_clean_hint">Volta à base para lavar o mop.</string>
+    <string name="carpet_sensitivity">Sensibilidade a tapetes</string>
+    <string name="drying_time">Tempo de secagem do mop</string>
+    <string name="voice_volume">Volume da voz</string>
+    <string name="child_lock">Bloqueio infantil</string>
+    <string name="child_lock_hint">Os botões do robô não fazem nada.</string>
+    <string name="dnd_switch">Sem limpeza nem avisos de voz nestes horários</string>
+    <string name="dnd_from">Das</string>
+    <string name="dnd_to">às</string>
+    <string name="empty_bin">Esvaziar o coletor</string>
+    <string name="wash_mop">Lavar o mop</string>
+    <string name="dry_mop">Secar o mop</string>
+    <string name="stop_drying">Parar a secagem</string>
+    <string name="busy_empty_bin">Esvaziando o coletor</string>
+    <string name="busy_wash_mop">Lavando o mop</string>
+    <string name="busy_dry_mop">Secando o mop</string>
+    <string name="busy_stop_drying">Parando a secagem</string>
+    <string name="auto_empty_every">Esvaziar o coletor a cada</string>
+    <plurals name="cleanings_count">
+        <item quantity="one">%1$d limpeza</item>
+        <item quantity="many">%1$d limpezas</item>
+        <item quantity="other">%1$d limpezas</item>
+    </plurals>
+    <string name="busy_changing">Alterando %1$s</string>
+    <string name="what_carpet_boost">o reforço em tapetes</string>
+    <string name="what_resume_cleaning">a continuação após recarregar</string>
+    <string name="what_mop_washing">a lavagem do mop</string>
+    <string name="what_carpet_sensitivity">a sensibilidade a tapetes</string>
+    <string name="what_drying_time">o tempo de secagem</string>
+    <string name="what_volume">o volume</string>
+    <string name="what_child_lock">o bloqueio infantil</string>
+    <string name="what_dnd">o não perturbe</string>
+    <string name="what_bin_emptying">o esvaziamento do coletor</string>
+    <string name="reset_title">Redefinir %1$s?</string>
+    <string name="reset_text" formatted="false">Faça isso depois de trocar ou limpar a peça. A vida útil restante volta a 100%.</string>
+    <string name="busy_reset">Redefinindo %1$s</string>
+    <string name="percent_left">%1$d%% restante</string>
+    <string name="hours_left">%1$d h restantes</string>
+
+    <!-- Rooms -->
+    <string name="per_room_switch">Limpar cada cômodo com as próprias configurações</string>
+    <string name="per_room_on">Ativado: cada cômodo usa as configurações abaixo. O modo, a sucção e a água da tela inicial valem para zonas.</string>
+    <string name="per_room_off">Desativado: todos os cômodos usam o modo, a sucção e a água escolhidos na tela inicial. As passadas e a ordem abaixo continuam valendo.</string>
+    <string name="busy_per_room_on">Ativando as configurações por cômodo</string>
+    <string name="busy_per_room_off">Desativando as configurações por cômodo</string>
+    <string name="save_order">Salvar a ordem</string>
+    <string name="busy_save_order">Salvando a ordem de limpeza</string>
+    <string name="busy_show_room">Mostrando %1$s</string>
+    <string name="busy_hide_room">Ocultando %1$s</string>
+    <string name="busy_room_suction">Salvando a sucção de %1$s</string>
+    <string name="busy_room_water">Salvando a água de %1$s</string>
+    <string name="busy_room_passes">Salvando as passadas de %1$s</string>
+    <string name="busy_room_mode">Salvando o modo de %1$s</string>
+    <string name="cd_room_hidden">Oculto: o robô o ignora. Toque para mostrar.</string>
+    <string name="cd_room_shown">Visível. Toque para ocultar.</string>
+    <string name="cd_clean_earlier">Limpar antes</string>
+    <string name="cd_clean_later">Limpar depois</string>
+    <string name="room_hidden_note">Oculto: o robô não o limpa e o mapa não o mostra.</string>
+    <string name="room_no_settings">Nenhuma configuração salva.</string>
+
+    <!-- Schedules -->
+    <string name="day_mon">Seg</string>
+    <string name="day_tue">Ter</string>
+    <string name="day_wed">Qua</string>
+    <string name="day_thu">Qui</string>
+    <string name="day_fri">Sex</string>
+    <string name="day_sat">Sáb</string>
+    <string name="day_sun">Dom</string>
+    <string name="days_every">Todos os dias</string>
+    <string name="days_weekdays">Dias úteis</string>
+    <string name="days_weekends">Fins de semana</string>
+    <string name="days_none">Nenhum dia</string>
+    <string name="days_once">%1$s, uma vez</string>
+    <string name="busy_add_schedule">Adicionando o agendamento das %1$s</string>
+    <string name="busy_save_schedule">Salvando o agendamento das %1$s</string>
+    <string name="busy_schedule_on">Ativando o agendamento das %1$s</string>
+    <string name="busy_schedule_off">Desativando o agendamento das %1$s</string>
+    <string name="busy_delete_schedule">Excluindo o agendamento das %1$s</string>
+    <string name="delete_schedule_title">Excluir o agendamento das %1$s?</string>
+    <string name="add_schedule">Adicionar agendamento</string>
+    <string name="schedules_error">Não foi possível ler os agendamentos.</string>
+    <string name="schedules_reading">Lendo os agendamentos</string>
+    <string name="schedules_empty">Ainda não há agendamentos.</string>
+    <string name="room_fallback">Cômodo %1$s</string>
+    <string name="schedule_official">Definido no app oficial</string>
+    <string name="schedule_no_rooms">Nenhum cômodo</string>
+    <string name="schedule_room">%1$s (%2$d×, %3$s)</string>
+    <string name="new_schedule">Novo agendamento</string>
+    <string name="change_schedule">Alterar o agendamento</string>
+    <string name="start_at">Iniciar às</string>
+    <string name="section_days">Dias</string>
+    <string name="every_week">Toda semana</string>
+    <string name="every_week_hint">Desativado: o agendamento roda uma vez.</string>
+    <string name="section_rooms_order">Cômodos, na ordem de limpeza</string>
+    <string name="add_room">Adicionar um cômodo</string>
+    <string name="add_room_hint">Adicione pelo menos um cômodo.</string>
+    <string name="cd_remove">Remover %1$s</string>
+</resources>

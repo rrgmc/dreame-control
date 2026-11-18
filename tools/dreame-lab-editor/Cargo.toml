@@ -1,0 +1,19 @@
+[package]
+name = "dreame-lab-editor"
+description = "Lab map editor for Dreame robot vacuums: a place to try features before they reach the apps."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "dreame-lab-editor"
+path = "src/main.rs"
+
+[dependencies]
+dreame.workspace = true
+dreame-map.workspace = true
+dreame-model.workspace = true
+anyhow.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["rt"] }
+eframe = "0.37"

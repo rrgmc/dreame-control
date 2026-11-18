@@ -1,0 +1,30 @@
+[package]
+name = "dreame-ffi"
+description = "UniFFI bindings over the dreame facade, for Kotlin (Android) and Swift (iOS)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "staticlib", "lib"]
+
+[[bin]]
+# Generates the Kotlin and Swift sources from the built library. Runs on the host only.
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+bindgen = ["uniffi/cli"]
+
+[dependencies]
+dreame.workspace = true
+dreame-cloud.workspace = true
+dreame-core.workspace = true
+dreame-i18n.workspace = true
+dreame-map.workspace = true
+dreame-model.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+uniffi = { workspace = true, features = ["tokio"] }

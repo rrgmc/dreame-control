@@ -1,0 +1,157 @@
+# Tasks for go-task (https://taskfile.dev). Run `task --list` to see them.
+version: "3"
+
+vars:
+  # The main checkout holds the untracked `local/out/` captures, also when
+  # this file runs from a worktree. Task's own `dir` function strips `/.git`,
+  # so no external `dirname` is needed (Windows has none on its PATH).
+  GIT_COMMON_DIR:
+    sh: git rev-parse --path-format=absolute --git-common-dir
+  MAIN_CHECKOUT: '{{dir .GIT_COMMON_DIR}}'
+  FIXTURES: '{{.DREAME_FIXTURES | default (printf "%s/local/out" .MAIN_CHECKOUT)}}'
+
+tasks:
+  default:
+    cmds:
+      - task --list
+    silent: true
+
+  build:
+    desc: Build the workspace.
+    cmds:
+      - cargo build --workspace
+
+  test:
+    desc: Run the offline tests.
+    cmds:
+      - cargo test --workspace {{.CLI_ARGS}}
+
+  test:fixtures:
+    desc: Run the tests, including those on real captures in local/out/.
+    env:
+      DREAME_FIXTURES: "{{.FIXTURES}}"
+    cmds:
+      - cargo test --workspace {{.CLI_ARGS}}
+
+  test:live:
+    desc: Run the tests, including live ones against the real cloud (read-only).
+    env:
+      DREAME_LIVE: "1"
+    cmds:
+      - cargo test --workspace {{.CLI_ARGS}}
+
+  clippy:
+    desc: Lint the workspace; warnings fail.
+    cmds:
+      - cargo clippy --workspace --all-targets -- -D warnings
+
+  check:
+    desc: The checks a commit must pass (clippy and tests).
+    cmds:
+      - task: clippy
+      - task: test
+
+  # The `dreame` tool. Every task below is read-only on the robot.
+
+  dreame:
+    desc: "Run the dreame tool with any arguments, e.g. `task dreame -- props 2.1 3.1`."
+    cmds:
+      - cargo run -q -p dreame-cli -- {{.CLI_ARGS}}
+
+  login:
+    desc: Log in and save the session in local/session.json.
+    cmds:
+      - cargo run -q -p dreame-cli -- login
+
+  devices:
+    desc: List the devices on the account.
+    cmds:
+      - cargo run -q -p dreame-cli -- devices
+
+  status:
+    desc: Show the robot's decoded status.
+    cmds:
+      - cargo run -q -p dreame-cli -- status {{.CLI_ARGS}}
+
+  watch:
+    desc: "Print live updates from the robot; pass a time with `task watch -- --seconds 600`."
+    cmds:
+      - cargo run -q -p dreame-cli -- watch {{.CLI_ARGS}}
+
+  map:
+    desc: Render the saved map to saved.png with the floor plan and room names.
+    cmds:
+      - cargo run -q -p dreame-cli -- map --which saved --out saved.png --floor-plan --names {{.CLI_ARGS}}
+
+  lab:editor:
+    desc: "Open the lab map editor on the robot's saved map, or on a snapshot file with `task lab:editor -- <file>`. It writes only after Apply and a confirmation."
+    cmds:
+      - cargo run -q -p dreame-lab-editor -- {{.CLI_ARGS}}
+
+  app:
+    desc: "Run the desktop app, Dreame Control (dreame-desktop). It signs in with its own form and keeps the session in the system's app folder."
+    cmds:
+      - cargo run -q -p dreame-desktop -- {{.CLI_ARGS}}
+
+  app:release:
+    desc: Build an optimized dreame-desktop into target/release.
+    cmds:
+      - cargo build --release -p dreame-desktop
+
+  app:package:
+    desc: "Package dreame-desktop for Windows into dist/ (installer and zip), e.g. `task app:package -- 0.2.0`. Needs Inno Setup 6. Releases are built by pushing a tag; see apps/dreame-desktop/packaging/README.md."
+    cmds:
+      - powershell -ExecutionPolicy Bypass -File apps/dreame-desktop/packaging/windows/package.ps1 {{.CLI_ARGS}}
+
+  map:snapshot:
+    desc: Save the current saved map to local/out/snapshots.
+    cmds:
+      - cargo run -q -p dreame-cli -- map snapshot {{.CLI_ARGS}}
+
+  # Android lab app (tools/dreame-lab-android). Needs the Android SDK and NDK and cargo-ndk.
+  lab:android:libs:
+    desc: Build the Rust library for the Android lab app (arm64 phones, x86_64 emulator) and generate its Kotlin bindings.
+    env:
+      ANDROID_HOME: '{{.ANDROID_HOME | default (printf "%s/Android/Sdk" (env "LOCALAPPDATA"))}}'
+    cmds:
+      - cargo ndk -t arm64-v8a -t x86_64 -P 26 -o tools/dreame-lab-android/app/src/main/jniLibs build -p dreame-ffi --lib --release
+      - cargo build -q -p dreame-ffi --lib
+      - cargo run -q -p dreame-ffi --features bindgen --bin uniffi-bindgen -- generate --library target/debug/{{if eq OS "windows"}}dreame_ffi.dll{{else if eq OS "darwin"}}libdreame_ffi.dylib{{else}}libdreame_ffi.so{{end}} --language kotlin --no-format --out-dir tools/dreame-lab-android/app/src/main/java
+
+  lab:android:
+    desc: Build the Android lab app's debug APK (runs lab:android:libs first).
+    deps: [lab:android:libs]
+    dir: tools/dreame-lab-android
+    env:
+      ANDROID_HOME: '{{.ANDROID_HOME | default (printf "%s/Android/Sdk" (env "LOCALAPPDATA"))}}'
+    cmds:
+      # An explicit .\ path: cmd may not search the current folder (NoDefaultCurrentDirectoryInExePath).
+      - '{{if eq OS "windows"}}cmd /c .\\gradlew.bat{{else}}./gradlew{{end}} assembleDebug'
+
+  # Android app, Dreame Control (apps/dreame-android). Same toolchain as the lab app.
+  android:libs:
+    desc: Build the Rust library for the Android app (arm64 phones, x86_64 emulator) and generate its Kotlin bindings.
+    env:
+      ANDROID_HOME: '{{.ANDROID_HOME | default (printf "%s/Android/Sdk" (env "LOCALAPPDATA"))}}'
+    cmds:
+      - cargo ndk -t arm64-v8a -t x86_64 -P 26 -o apps/dreame-android/app/src/main/jniLibs build -p dreame-ffi --lib --release
+      - cargo build -q -p dreame-ffi --lib
+      - cargo run -q -p dreame-ffi --features bindgen --bin uniffi-bindgen -- generate --library target/debug/{{if eq OS "windows"}}dreame_ffi.dll{{else if eq OS "darwin"}}libdreame_ffi.dylib{{else}}libdreame_ffi.so{{end}} --language kotlin --no-format --out-dir apps/dreame-android/app/src/main/java
+
+  android:
+    desc: Build the Android app's debug APK (runs android:libs first).
+    deps: [android:libs]
+    dir: apps/dreame-android
+    env:
+      ANDROID_HOME: '{{.ANDROID_HOME | default (printf "%s/Android/Sdk" (env "LOCALAPPDATA"))}}'
+    cmds:
+      - '{{if eq OS "windows"}}cmd /c .\\gradlew.bat{{else}}./gradlew{{end}} assembleDebug'
+
+  android:release:
+    desc: "Build the Android app's release APK, shrunk and signed with the key in apps/dreame-android/keystore.properties (the debug key without it)."
+    deps: [android:libs]
+    dir: apps/dreame-android
+    env:
+      ANDROID_HOME: '{{.ANDROID_HOME | default (printf "%s/Android/Sdk" (env "LOCALAPPDATA"))}}'
+    cmds:
+      - '{{if eq OS "windows"}}cmd /c .\\gradlew.bat{{else}}./gradlew{{end}} assembleRelease'

@@ -1,0 +1,20 @@
+[package]
+name = "dreame-map"
+description = "Offline map codec for Dreame robot vacuums: envelope, header, pixel grids, trailer, merge, model, render and edit commands."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+dreame-core.workspace = true
+dreame-i18n.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+base64.workspace = true
+flate2.workspace = true
+aes.workspace = true
+cbc.workspace = true
+md-5.workspace = true
+sha2.workspace = true
+image.workspace = true
+bzip2.workspace = true

@@ -1,0 +1,32 @@
+[package]
+name = "dreame-desktop"
+description = "Desktop app for Dreame robot vacuums: see the map, start and follow cleaning, edit the map."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "dreame-desktop"
+path = "src/main.rs"
+
+[dependencies]
+dreame.workspace = true
+dreame-cloud.workspace = true
+dreame-core.workspace = true
+dreame-i18n.workspace = true
+dreame-map.workspace = true
+dreame-model.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+eframe = "0.37"
+directories = "6"
+notify-rust = "4"
+image = { workspace = true, features = ["jpeg"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+sys-locale = "0.3"
+
+# The icon of the Windows executable (build.rs).
+[build-dependencies]
+winresource = "0.1"

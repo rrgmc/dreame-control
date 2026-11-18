@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">Dreame Control</string>
+
+    <!-- Shared -->
+    <string name="try_again">Try again</string>
+    <string name="cancel">Cancel</string>
+    <string name="close">Close</string>
+    <string name="save">Save</string>
+    <string name="delete">Delete</string>
+    <string name="edit">Edit</string>
+    <string name="undo">Undo</string>
+    <string name="clear">Clear</string>
+    <string name="reset">Reset</string>
+    <string name="not_read_yet">Not read yet.</string>
+    <string name="cd_back">Back to the map</string>
+    <string name="percent">%1$d%%</string>
+    <string name="area_m2">%1$d m²</string>
+    <string name="minutes_short">%1$d min</string>
+    <string name="hours_short">%1$d h</string>
+    <string name="hours_minutes">%1$d h %2$d min</string>
+    <string name="progress_done">%1$d%% done</string>
+    <string name="passes_count" translatable="false">%1$d×</string>
+    <string name="list_item" translatable="false">%1$d. %2$s</string>
+
+    <!-- Start, sign-in and robot choice -->
+    <string name="signing_in">Signing in</string>
+    <string name="connecting_to">Connecting to %1$s</string>
+    <string name="sign_in">Sign in</string>
+    <string name="sign_out">Sign out</string>
+    <string name="login_intro">Sign in with your Dreamehome account.</string>
+    <string name="email">Email</string>
+    <string name="password">Password</string>
+    <string name="account_region">Account region</string>
+    <string name="login_privacy">The password is used once and not stored. The app keeps the session on this phone only.</string>
+    <string name="region_auto">Find it for me</string>
+    <string name="region_americas">Americas</string>
+    <string name="region_europe">Europe</string>
+    <string name="region_asia_pacific">Asia Pacific</string>
+    <string name="region_china">China</string>
+    <string name="region_russia">Russia</string>
+    <string name="region_korea">Korea</string>
+    <string name="region_belarus">Belarus</string>
+    <string name="choose_robot">Choose a robot</string>
+    <string name="robot_offline">%1$s · offline</string>
+
+    <!-- Errors and messages -->
+    <string name="error_saved_sign_in">Your saved sign-in could not be used, so please sign in again.</string>
+    <string name="error_sign_in">Could not sign in.\n\n%1$s</string>
+    <string name="error_list_robots">Could not list the robots.\n\n%1$s</string>
+    <string name="error_no_robot">There is no robot vacuum on this account.</string>
+    <string name="error_reach_robot">Could not reach the robot.\n\n%1$s</string>
+    <string name="error_auth">The sign-in has expired. (%1$s)</string>
+    <string name="error_network">Cannot reach the Dreame cloud or the robot. (%1$s)</string>
+    <string name="error_unsupported">This robot does not have that feature. (%1$s)</string>
+    <string name="error_login_credentials">The email or password is not right.</string>
+    <string name="error_login_network">Cannot reach the Dreame cloud. Check the internet connection.</string>
+    <string name="error_read_robot">Reading the robot failed: %1$s</string>
+    <string name="command_failed">%1$s failed: %2$s</string>
+    <string name="saved_to_robot">Saved to the robot.</string>
+    <string name="notice_text">%1$s: %2$s</string>
+
+    <!-- Notifications -->
+    <string name="channel_alerts_name">Robot news</string>
+    <string name="channel_alerts_description">A finished job, an error, or a robot that seems stuck.</string>
+    <string name="channel_job_name">Running job</string>
+    <string name="channel_job_description">Shown while the app follows a running job.</string>
+    <string name="job_following">Following the robot</string>
+
+    <!-- Home screen -->
+    <string name="target_home">Whole home</string>
+    <string name="target_rooms">Rooms</string>
+    <string name="target_zone">Zone</string>
+    <string name="mode_vacuum">Vacuum</string>
+    <string name="mode_mop">Mop</string>
+    <string name="mode_vacuum_and_mop">Vacuum and mop</string>
+    <string name="mode_vacuum_then_mop">Vacuum, then mop</string>
+    <string name="mode_both">Both</string>
+    <string name="suction_quiet">Quiet</string>
+    <string name="suction_standard">Standard</string>
+    <string name="suction_strong">Strong</string>
+    <string name="suction_max">Max</string>
+    <string name="level_low">Low</string>
+    <string name="level_medium">Medium</string>
+    <string name="level_high">High</string>
+    <string name="cd_battery">Battery</string>
+    <string name="rooms_title">Rooms</string>
+    <string name="cd_robot_settings">Robot settings</string>
+    <string name="cd_more">More</string>
+    <string name="schedules_title">Schedules</string>
+    <string name="history_title">History</string>
+    <string name="reload_map">Reload the map</string>
+    <string name="app_settings">App settings</string>
+    <string name="switch_robot">Switch robot</string>
+    <string name="cd_fit_map">Show the whole map</string>
+    <string name="busy_pausing">Pausing</string>
+    <string name="busy_resuming">Resuming</string>
+    <string name="busy_starting">Starting</string>
+    <string name="busy_starting_rooms">Starting the rooms</string>
+    <string name="busy_starting_zone">Starting the zone</string>
+    <string name="busy_docking">Docking</string>
+    <string name="busy_finding">Finding the robot</string>
+    <string name="busy_ending">Ending the job</string>
+    <string name="ask_end_title">End cleaning?</string>
+    <string name="ask_end_text">The current job ends. The robot stays where it is.</string>
+    <string name="ask_end_button">End cleaning</string>
+    <string name="ask_dock_title">Return to the dock?</string>
+    <string name="ask_dock_text">The current job ends and the robot goes back to its dock.</string>
+    <string name="ask_dock_button">Return to dock</string>
+    <string name="hidden_room_note">This grey area is hidden, so the robot does not clean it. To show it again, turn it on in Rooms.</string>
+    <string name="link_live">Live updates on</string>
+    <string name="link_connecting">Connecting for live updates</string>
+    <string name="link_offline">No live updates; the status is read every 20 seconds</string>
+    <string name="map_loading">Loading the map</string>
+    <string name="map_error">The map could not be loaded.</string>
+    <string name="map_none">No map yet. Start a cleaning to map the home.</string>
+    <string name="status_connecting">Connecting</string>
+    <string name="hint_home">Cleans every room in the saved order.</string>
+    <string name="hint_rooms_empty">Tap rooms on the map, in the order to clean them.</string>
+    <plurals name="hint_rooms_picked">
+        <item quantity="one">%1$d room: %2$s</item>
+        <item quantity="other">%1$d rooms: %2$s</item>
+    </plurals>
+    <string name="hint_no_zone">No room for a zone here; move the map and try again.</string>
+    <string name="hint_zone">Zone of %1$.1f × %2$.1f m. Drag it to move it, and its corner to resize it.</string>
+    <string name="passes">Passes</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_resume">Resume</string>
+    <string name="action_start">Start cleaning</string>
+    <string name="action_clean_rooms">Clean rooms</string>
+    <string name="action_clean_zone">Clean zone</string>
+    <string name="cd_end_job">End the job</string>
+    <string name="cd_dock">Send the robot to its dock</string>
+    <string name="cd_find">Find the robot</string>
+    <string name="cleaning_settings">Cleaning settings</string>
+    <string name="summary_wetness">Water %1$d</string>
+    <string name="summary_water">Water %1$s</string>
+    <string name="per_room_note">Each room uses its own settings (see Rooms). These apply to zones.</string>
+    <string name="section_mode">Mode</string>
+    <string name="section_suction">Suction</string>
+    <string name="section_mop_wetness">Mop wetness</string>
+    <string name="section_water">Water</string>
+    <string name="busy_mode">Changing the mode</string>
+    <string name="busy_suction">Changing the suction</string>
+    <string name="busy_wetness">Changing the wetness</string>
+    <string name="busy_water">Changing the water</string>
+
+    <!-- App settings -->
+    <string name="notifications">Notifications</string>
+    <string name="notifications_hint">Tell me when a job ends, when the robot reports an error, and when it seems stuck. While a job runs, the app keeps following it in the background.</string>
+    <string name="sign_out_title">Sign out?</string>
+    <string name="sign_out_text">The app forgets the session on this phone. The robot keeps working as before.</string>
+
+    <!-- History -->
+    <string name="history_error">The history could not be read.</string>
+    <string name="history_reading">Reading the history</string>
+    <string name="history_empty">No jobs yet.</string>
+    <string name="unknown_time">Unknown time</string>
+    <string name="cd_show_map">Show the map</string>
+    <string name="show_older">Show older jobs</string>
+    <plurals name="jobs_count">
+        <item quantity="one">%1$d job</item>
+        <item quantity="other">%1$d jobs</item>
+    </plurals>
+    <string name="job">Job</string>
+    <string name="job_no_map">The robot kept no map of this job.</string>
+
+    <!-- Robot settings -->
+    <string name="robot_title">Robot</string>
+    <string name="section_cleaning">Cleaning</string>
+    <string name="section_dnd">Do not disturb</string>
+    <string name="section_obstacles">Obstacle avoidance</string>
+    <string name="section_station">Station</string>
+    <string name="section_maintenance">Maintenance</string>
+    <string name="carpet_boost">Carpet boost</string>
+    <string name="carpet_boost_hint">More suction on carpets.</string>
+    <string name="resume_cleaning">Resume after recharging</string>
+    <string name="resume_cleaning_hint">Finish a long job after charging.</string>
+    <string name="self_clean">Wash the mop during the job</string>
+    <string name="self_clean_hint">Return to the station to wash the mop.</string>
+    <string name="carpet_sensitivity">Carpet sensitivity</string>
+    <string name="drying_time">Mop drying time</string>
+    <string name="voice_volume">Voice volume</string>
+    <string name="child_lock">Child lock</string>
+    <string name="child_lock_hint">The robot\'s buttons do nothing.</string>
+    <string name="dnd_switch">No cleaning or voice prompts in these hours</string>
+    <string name="dnd_from">From</string>
+    <string name="dnd_to">to</string>
+    <string name="empty_bin">Empty the bin</string>
+    <string name="wash_mop">Wash the mop</string>
+    <string name="dry_mop">Dry the mop</string>
+    <string name="stop_drying">Stop drying</string>
+    <string name="busy_empty_bin">Emptying the bin</string>
+    <string name="busy_wash_mop">Washing the mop</string>
+    <string name="busy_dry_mop">Drying the mop</string>
+    <string name="busy_stop_drying">Stopping drying</string>
+    <string name="auto_empty_every">Empty the bin every</string>
+    <plurals name="cleanings_count">
+        <item quantity="one">%1$d cleaning</item>
+        <item quantity="other">%1$d cleanings</item>
+    </plurals>
+    <string name="busy_changing">Changing %1$s</string>
+    <string name="what_carpet_boost">carpet boost</string>
+    <string name="what_resume_cleaning">resume after recharging</string>
+    <string name="what_mop_washing">mop washing</string>
+    <string name="what_carpet_sensitivity">carpet sensitivity</string>
+    <string name="what_drying_time">drying time</string>
+    <string name="what_volume">volume</string>
+    <string name="what_child_lock">child lock</string>
+    <string name="what_dnd">do not disturb</string>
+    <string name="what_bin_emptying">bin emptying</string>
+    <string name="reset_title">Reset the %1$s?</string>
+    <string name="reset_text" formatted="false">Do this after replacing or cleaning it. Its remaining life goes back to 100%.</string>
+    <string name="busy_reset">Resetting the %1$s</string>
+    <string name="percent_left">%1$d%% left</string>
+    <string name="hours_left">%1$d h left</string>
+
+    <!-- Rooms -->
+    <string name="per_room_switch">Clean each room with its own settings</string>
+    <string name="per_room_on">On: each room uses the settings below. The mode, suction and water on the home screen apply to zones.</string>
+    <string name="per_room_off">Off: every room uses the mode, suction and water chosen on the home screen. Passes and order below still apply.</string>
+    <string name="busy_per_room_on">Turning on per-room settings</string>
+    <string name="busy_per_room_off">Turning off per-room settings</string>
+    <string name="save_order">Save the order</string>
+    <string name="busy_save_order">Saving the cleaning order</string>
+    <string name="busy_show_room">Showing %1$s</string>
+    <string name="busy_hide_room">Hiding %1$s</string>
+    <string name="busy_room_suction">Saving the suction for %1$s</string>
+    <string name="busy_room_water">Saving the water for %1$s</string>
+    <string name="busy_room_passes">Saving the passes for %1$s</string>
+    <string name="busy_room_mode">Saving the mode for %1$s</string>
+    <string name="cd_room_hidden">Hidden: the robot skips it. Tap to show it.</string>
+    <string name="cd_room_shown">Shown. Tap to hide it.</string>
+    <string name="cd_clean_earlier">Clean earlier</string>
+    <string name="cd_clean_later">Clean later</string>
+    <string name="room_hidden_note">Hidden: the robot does not clean it, and the map does not show it.</string>
+    <string name="room_no_settings">No stored settings.</string>
+
+    <!-- Schedules -->
+    <string name="day_mon">Mon</string>
+    <string name="day_tue">Tue</string>
+    <string name="day_wed">Wed</string>
+    <string name="day_thu">Thu</string>
+    <string name="day_fri">Fri</string>
+    <string name="day_sat">Sat</string>
+    <string name="day_sun">Sun</string>
+    <string name="days_every">Every day</string>
+    <string name="days_weekdays">Weekdays</string>
+    <string name="days_weekends">Weekends</string>
+    <string name="days_none">No day</string>
+    <string name="days_once">%1$s, once</string>
+    <string name="busy_add_schedule">Adding the %1$s schedule</string>
+    <string name="busy_save_schedule">Saving the %1$s schedule</string>
+    <string name="busy_schedule_on">Turning the %1$s schedule on</string>
+    <string name="busy_schedule_off">Turning the %1$s schedule off</string>
+    <string name="busy_delete_schedule">Deleting the %1$s schedule</string>
+    <string name="delete_schedule_title">Delete the %1$s schedule?</string>
+    <string name="add_schedule">Add a schedule</string>
+    <string name="schedules_error">The schedules could not be read.</string>
+    <string name="schedules_reading">Reading the schedules</string>
+    <string name="schedules_empty">No schedules yet.</string>
+    <string name="room_fallback">Room %1$s</string>
+    <string name="schedule_official">Set in the official app</string>
+    <string name="schedule_no_rooms">No rooms</string>
+    <string name="schedule_room">%1$s (%2$d×, %3$s)</string>
+    <string name="new_schedule">New schedule</string>
+    <string name="change_schedule">Change the schedule</string>
+    <string name="start_at">Start at</string>
+    <string name="section_days">Days</string>
+    <string name="every_week">Every week</string>
+    <string name="every_week_hint">Off: the schedule runs once.</string>
+    <string name="section_rooms_order">Rooms, in cleaning order</string>
+    <string name="add_room">Add a room</string>
+    <string name="add_room_hint">Add at least one room.</string>
+    <string name="cd_remove">Remove %1$s</string>
+</resources>

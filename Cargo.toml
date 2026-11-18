@@ -1,0 +1,53 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/dreame-core",
+    "crates/dreame-i18n",
+    "crates/dreame-cloud",
+    "crates/dreame-mqtt",
+    "crates/dreame-model",
+    "crates/dreame-map",
+    "crates/dreame",
+    "crates/dreame-ffi",
+    "apps/dreame-cli",
+    "tools/dreame-lab-editor",
+    "apps/dreame-desktop",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+rust-version = "1.80"
+
+[workspace.dependencies]
+dreame-core = { path = "crates/dreame-core" }
+dreame-i18n = { path = "crates/dreame-i18n" }
+dreame-cloud = { path = "crates/dreame-cloud" }
+dreame-map = { path = "crates/dreame-map" }
+dreame-mqtt = { path = "crates/dreame-mqtt" }
+dreame-model = { path = "crates/dreame-model" }
+dreame = { path = "crates/dreame" }
+uniffi = "0.32"
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip"] }
+tracing = "0.1"
+md-5 = "0.10"
+sha2 = "0.10"
+aes = "0.8"
+cbc = "0.1"
+flate2 = "1"
+base64 = "0.22"
+rand = "0.8"
+urlencoding = "2"
+bzip2 = "0.6"
+image = { version = "0.25", default-features = false, features = ["png"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
+x509-parser = { version = "0.16", features = ["verify"] }
+futures-core = "0.3"
+futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
