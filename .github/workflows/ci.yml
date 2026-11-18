@@ -6,6 +6,9 @@
 # jobs. The workflow still starts, so the required checks report as skipped, which GitHub counts as
 # passed; with paths-ignore they would never report and the pull request could not merge.
 name: CI
+# A pull request run shows the pull request's number after its title. Other runs evaluate to an
+# empty name, so GitHub keeps its default title (the commit message for a push).
+run-name: ${{ github.event_name == 'pull_request' && format('{0} (#{1})', github.event.pull_request.title, github.event.pull_request.number) || '' }}
 
 on:
   push:
