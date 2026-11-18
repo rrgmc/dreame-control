@@ -54,11 +54,18 @@ Each script builds a release binary and writes the packages into `dist/` at the 
 | System | Command | Needs |
 |---|---|---|
 | Windows | `task app:package -- 0.2.0`, or `powershell -File apps/dreame-desktop/packaging/windows/package.ps1 0.2.0` | Inno Setup 6 |
-| macOS | `bash apps/dreame-desktop/packaging/macos/package.sh 0.2.0` | Xcode command line tools, the Rust target `aarch64-apple-darwin` |
+| macOS | `task app:package:macos -- 0.2.0`, or `task app:package:macos:notarize -- 0.2.0` to sign and notarize | Xcode command line tools, the Rust target `aarch64-apple-darwin` |
 
-A local macOS build is signed ad hoc unless `DREAME_SIGN_IDENTITY` names a Developer ID Application
-identity in the keychain. To notarize it as well, give an App Store Connect API key; the header
-of `package.sh` lists the variables.
+A local macOS build is signed ad hoc: `task app:package:macos -- 0.2.0`. To sign it with your
+Developer ID and notarize it, run `task app:package:macos:notarize -- 0.2.0`. That uses the Developer
+ID Application identity in your keychain and the notarytool keychain profile `mac-apps`, made once
+from an App Store Connect API key:
+
+```bash
+xcrun notarytool store-credentials mac-apps --key AuthKey_<key id>.p8 --key-id <key id> --issuer <issuer id>
+```
+
+The header of `package.sh` lists the variables that override these defaults.
 | Linux | `bash apps/dreame-desktop/packaging/linux/package.sh 0.2.0` | `curl`, and the libraries listed in the workflow |
 
 ## Cost
