@@ -9,23 +9,32 @@
 #   DREAME_SIGN_IDENTITY    a "Developer ID Application: Name (TEAMID)" identity in the keychain.
 #                           Unset, the app is signed ad hoc, and the first start needs
 #                           right-click > Open.
-#   DREAME_NOTARY_PROFILE   the name of a notarytool keychain profile, made once with
+# Notarization needs DREAME_SIGN_IDENTITY and an App Store Connect API key, given in one of two ways:
+#   DREAME_NOTARY_KEY       the path of the key's .p8 file,
+#   DREAME_NOTARY_KEY_ID    the key's ID and
+#   DREAME_NOTARY_ISSUER    its issuer ID. The release workflow sets these three.
+# or
+#   DREAME_NOTARY_PROFILE   the name of a notarytool keychain profile that holds the key, made once with
 #                             xcrun notarytool store-credentials <name> \
-#                               --apple-id <apple-id> --team-id <TEAMID> --password <app-specific>
-#                           Set, the DMG is sent to Apple for notarization and the ticket is
-#                           stapled to the DMG and to the app. It needs DREAME_SIGN_IDENTITY.
-#   DREAME_NOTARY_KEYCHAIN  optional: the keychain that holds the profile, when it is not the
-#                           default one. The release workflow sets it.
+#                               --key <file.p8> --key-id <key id> --issuer <issuer id>
+# With either, the DMG is sent to Apple for notarization and the ticket is stapled to the DMG
+# and to the app.
 set -euo pipefail
 VERSION="$1"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ASSETS="$HERE/../../assets"
 SIGN_IDENTITY="${DREAME_SIGN_IDENTITY:-}"
-NOTARY_PROFILE="${DREAME_NOTARY_PROFILE:-}"
+NOTARY_ARGS=()
+if [ -n "${DREAME_NOTARY_KEY:-}" ]; then
+  NOTARY_ARGS=(--key "$DREAME_NOTARY_KEY" --key-id "${DREAME_NOTARY_KEY_ID:?needs DREAME_NOTARY_KEY_ID}" \
+    --issuer "${DREAME_NOTARY_ISSUER:?needs DREAME_NOTARY_ISSUER}")
+elif [ -n "${DREAME_NOTARY_PROFILE:-}" ]; then
+  NOTARY_ARGS=(--keychain-profile "$DREAME_NOTARY_PROFILE")
+fi
 
 # Check the signing settings before the build, so a mistake costs a second and not a build.
-if [ -n "$NOTARY_PROFILE" ] && [ -z "$SIGN_IDENTITY" ]; then
-  echo "package.sh: DREAME_NOTARY_PROFILE needs DREAME_SIGN_IDENTITY; Apple does not notarize an ad hoc signature." >&2
+if [ ${#NOTARY_ARGS[@]} -gt 0 ] && [ -z "$SIGN_IDENTITY" ]; then
+  echo "package.sh: notarization needs DREAME_SIGN_IDENTITY; Apple does not notarize an ad hoc signature." >&2
   exit 1
 fi
 if [ -n "$SIGN_IDENTITY" ] && ! security find-identity -v -p codesigning | grep -qF "$SIGN_IDENTITY"; then
@@ -69,21 +78,17 @@ if [ -n "$SIGN_IDENTITY" ]; then
   codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG"
 fi
 
-if [ -n "$NOTARY_PROFILE" ]; then
-  KEYCHAIN_ARGS=()
-  [ -n "${DREAME_NOTARY_KEYCHAIN:-}" ] && KEYCHAIN_ARGS=(--keychain "$DREAME_NOTARY_KEYCHAIN")
+if [ ${#NOTARY_ARGS[@]} -gt 0 ]; then
   # One submission covers the DMG and the app inside it. Apple's answer takes a few minutes.
   echo "Notarizing $DMG"
   OUT="$STAGE/notarytool.json"
-  if ! xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" \
-      ${KEYCHAIN_ARGS[@]+"${KEYCHAIN_ARGS[@]}"} --wait --output-format json > "$OUT" \
+  if ! xcrun notarytool submit "$DMG" "${NOTARY_ARGS[@]}" --wait --output-format json > "$OUT" \
       || ! grep -q '"status" *: *"Accepted"' "$OUT"; then
     cat "$OUT" >&2
     ID="$(sed -n 's/.*"id" *: *"\([^"]*\)".*/\1/p' "$OUT" | head -1)"
     if [ -n "$ID" ]; then
       echo "Apple's log of the submission:" >&2
-      xcrun notarytool log "$ID" --keychain-profile "$NOTARY_PROFILE" \
-        ${KEYCHAIN_ARGS[@]+"${KEYCHAIN_ARGS[@]}"} >&2 || true
+      xcrun notarytool log "$ID" "${NOTARY_ARGS[@]}" >&2 || true
     fi
     echo "package.sh: notarization failed." >&2
     exit 1
@@ -91,8 +96,19 @@ if [ -n "$NOTARY_PROFILE" ]; then
   cat "$OUT"
   # The stapled ticket lets Gatekeeper accept the file on a Mac without a network connection.
   # The submission also registered the app inside the DMG, so the app takes a ticket too.
-  xcrun stapler staple "$DMG"
-  xcrun stapler staple "$APP"
+  # Apple's ticket server sometimes drops the connection, so each staple is tried a few times.
+  for FILE in "$DMG" "$APP"; do
+    ATTEMPT=1
+    until xcrun stapler staple "$FILE"; do
+      if [ "$ATTEMPT" -ge 5 ]; then
+        echo "package.sh: stapling $FILE failed $ATTEMPT times." >&2
+        exit 1
+      fi
+      ATTEMPT=$((ATTEMPT + 1))
+      echo "Stapling failed; trying again in 30 seconds." >&2
+      sleep 30
+    done
+  done
   spctl --assess --type execute --verbose=2 "$APP"
 fi
 

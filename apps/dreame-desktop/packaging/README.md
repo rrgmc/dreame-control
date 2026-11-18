@@ -13,12 +13,12 @@ notarized by Apple, so Gatekeeper opens it without a warning:
 
 | Secret | Value |
 |---|---|
-| `MACOS_CERTIFICATE_P12_BASE64` | The "Developer ID Application" certificate with its private key, exported from Keychain Access as a `.p12` file, base64-encoded: `base64 -i cert.p12 \| pbcopy` |
+| `MACOS_CERTIFICATE_P12` | The "Developer ID Application" certificate with its private key, exported from Keychain Access as a `.p12` file, base64-encoded: `base64 -i cert.p12 \| pbcopy` |
 | `MACOS_CERTIFICATE_PASSWORD` | The password given to the `.p12` file on export |
-| `APPLE_NOTARY_APPLE_ID` | The Apple ID of the developer account |
-| `APPLE_NOTARY_PASSWORD` | An app-specific password for that Apple ID, made at account.apple.com under Sign-In and Security |
-
-The workflow reads the team id from the certificate's name. Without these secrets the macOS job
+| `NOTARY_API_KEY` | An App Store Connect API key: the contents of its `.p8` file. Make one at appstoreconnect.apple.com under Users and Access > Integrations > Team Keys, with the Developer role. |
+| `NOTARY_API_KEY_ID` | That key's ID |
+| `NOTARY_API_ISSUER` | The issuer ID shown above the list of keys |
+ Without these secrets the macOS job
 fails and no release is published.
 
 ```bash
@@ -57,8 +57,8 @@ Each script builds a release binary and writes the packages into `dist/` at the 
 | macOS | `bash apps/dreame-desktop/packaging/macos/package.sh 0.2.0` | Xcode command line tools, the Rust target `aarch64-apple-darwin` |
 
 A local macOS build is signed ad hoc unless `DREAME_SIGN_IDENTITY` names a Developer ID Application
-identity in the keychain. Set `DREAME_NOTARY_PROFILE` as well to notarize it; the header of
-`package.sh` says how to make that profile.
+identity in the keychain. To notarize it as well, give an App Store Connect API key; the header
+of `package.sh` lists the variables.
 | Linux | `bash apps/dreame-desktop/packaging/linux/package.sh 0.2.0` | `curl`, and the libraries listed in the workflow |
 
 ## Cost
