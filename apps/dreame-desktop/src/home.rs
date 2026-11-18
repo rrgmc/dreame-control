@@ -229,7 +229,7 @@ impl Home {
                     }
                 }
             }
-            Msg::Edited { .. } | Msg::Progress(_) => {
+            Msg::Edited { .. } | Msg::Progress(_) | Msg::BackedUp(_) => {
                 if let Some(new) = self.editor.as_mut().and_then(|e| e.handle(msg)) {
                     self.view.set_map(&new.map);
                     self.picked.retain(|id| new.map.rooms.contains_key(id));

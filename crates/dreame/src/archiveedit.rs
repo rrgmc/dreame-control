@@ -310,6 +310,147 @@ fn job_line(what: &str, r: &JobReport) -> String {
     format!("{what} {end} (status before {:?}, seen {:?})", r.before, r.seen)
 }
 
+/// Restores `body` over `map_id` from `server` and waits for the saved map to change from
+/// `pointer`. With `prime`, restores the oldest original entry first, as the robot skips an
+/// archive close to the map it holds. `hint` says how to undo, for the errors. Returns the
+/// restore's report and the saved map read back.
+#[allow(clippy::too_many_arguments)]
+async fn load_archive(
+    robot: &CloudRobot,
+    server: &FileServer,
+    map_id: u32,
+    pointer: &str,
+    body: Vec<u8>,
+    prime: bool,
+    hint: &str,
+    progress: &mut dyn FnMut(&str),
+) -> Result<(Served, Saved)> {
+    let (c, dev) = (&*robot.client, &robot.device);
+    let mut pointer = pointer.to_string();
+    if prime {
+        let l = recovery::list(c, dev).await?;
+        let e = prime_entry(&l, map_id).ok_or_else(|| anyhow!("no original entry of map {map_id} to restore first"))?.clone();
+        progress(&format!("restoring the original entry (time {}) first", e.time));
+        let url = recovery::archive_url(c, dev, &e).await?;
+        let old = pointer.clone();
+        let r = recovery::restore_until(c, dev, map_id, &url, Wait::default(), || saved_moved(robot, &old)).await?;
+        progress(&job_line("restore of the original", &r));
+        if !r.succeeded() {
+            bail!("stopped before the restore from this machine; {hint}");
+        }
+        pointer = wait_saved_change(robot, &pointer, 60).await?.pointer;
+    }
+    progress(&format!("restoring the archive from this machine, port {}", server.port()));
+    let old = pointer.clone();
+    let served = serve_and_restore(c, dev, map_id, server, body, Wait::default(), || saved_moved(robot, &old)).await?;
+    progress(&job_line("restore of the archive", &served.job));
+    // The robot can report a failure and still load the archive on a retry (after a late
+    // firewall answer, for one), so the saved map decides.
+    let s = wait_saved_change(robot, &pointer, 60).await?;
+    if s.pointer == pointer {
+        let why = if server.requests().is_empty() { " (no request reached this machine: check the firewall)" } else { "" };
+        bail!("the archive was not loaded{why}; {hint}");
+    }
+    if !served.job.succeeded() {
+        progress("the restore reported a failure, but the saved map changed: going on");
+    }
+    Ok((served, s))
+}
+
+/// Sends the per-room settings of `snapshot`, which a restore drops. Returns the result code of
+/// the write, or why it failed.
+async fn put_back_settings(robot: &CloudRobot, snapshot: Map, dir: &Path, stamp: &str) -> std::result::Result<Option<i64>, String> {
+    let edit = mapedit::Edit::RestoreSettings(Box::new(snapshot));
+    mapedit::apply(robot, &edit, dir, &format!("{stamp}-settings"), mapedit::Wait::default())
+        .await
+        .map(|r| r.code)
+        .map_err(|e| format!("{e:#}"))
+}
+
+/// Settings for [`restore_file`].
+#[derive(Debug, Clone)]
+pub struct RestoreOptions {
+    /// Where the snapshots before and after go.
+    pub dir: PathBuf,
+    /// Prefix of the file names.
+    pub stamp: String,
+    /// TCP port the archive is served on.
+    pub port: u16,
+    /// Restore the oldest original entry first ([`prime_entry`]).
+    pub prime: bool,
+}
+
+/// What [`restore_file`] did.
+#[derive(Debug)]
+pub struct RestoreReport {
+    pub before_file: PathBuf,
+    /// The live frame before the restore, with the per-room settings.
+    pub before_live_file: PathBuf,
+    pub after_file: PathBuf,
+    /// Every request that reached the file server.
+    pub requests: Vec<Request>,
+    /// The result code of the settings write, or why it failed. `Ok(None)` also when no room of
+    /// the restored map had settings to put back.
+    pub settings: std::result::Result<Option<i64>, String>,
+    /// What changed in the saved map ([`mapedit::diff`]).
+    pub diff: Vec<String>,
+}
+
+/// Checks that `archive` is a map backup: a bzip2 tar that holds the room grid.
+pub fn check_archive(archive: &[u8]) -> Result<()> {
+    let a = Archive::decode(archive).context("the file is not a map backup")?;
+    Segmentation::read(&a).context("the file is not a map backup")?;
+    Ok(())
+}
+
+/// Replaces the current saved map with an archive from this machine, such as a backup that
+/// [`fresh_backup`] downloaded. Then puts back the per-room settings the map had before, for the
+/// rooms the restored map still has. `progress` gets one line per step. Writes to the robot; the
+/// caller checks that the user approved it.
+pub async fn restore_file(robot: &CloudRobot, archive: Vec<u8>, opts: &RestoreOptions, progress: &mut dyn FnMut(&str)) -> Result<RestoreReport> {
+    let (c, dev) = (&*robot.client, &robot.device);
+    check_archive(&archive)?;
+    std::fs::create_dir_all(&opts.dir)?;
+    let file = |name: &str| opts.dir.join(format!("{}-{name}", opts.stamp));
+    if let Some(b) = robot.busy().await? {
+        bail!("the robot is busy ({b}); restore only when it is idle and docked");
+    }
+    let saved = mapedit::read_saved(robot).await?;
+    let map_id = map_id_u32(&saved.map)?;
+    // Listen first: a firewall prompt then shows before anything on the robot changes.
+    let server = start_server(c, dev, &format!("{}-{map_id}.tbz2", opts.stamp), opts.port).await?;
+    progress(&format!(
+        "serving on port {}; if Windows asks whether to allow network access, allow it now",
+        server.port()
+    ));
+    let before_file = file("restore-before.txt");
+    std::fs::write(&before_file, &saved.envelope)?;
+    let before_live_file = file("restore-before-live.txt");
+    std::fs::write(&before_live_file, &saved.live_envelope)?;
+    let hint = format!("the room settings before are in {}", before_live_file.display());
+    let (served, loaded) = load_archive(robot, &server, map_id, &saved.pointer, archive, opts.prime, &hint, progress).await?;
+    // Settings follow room ids; rooms the restored map lacks have none to get.
+    let mut snapshot = saved.map.clone();
+    snapshot.rooms.retain(|id, _| loaded.map.rooms.contains_key(id));
+    let settings = if snapshot.rooms.values().any(|r| r.settings.is_some()) {
+        progress("putting back the per-room settings");
+        put_back_settings(robot, snapshot, &opts.dir, &opts.stamp).await
+    } else {
+        Ok(None)
+    };
+    let after = mapedit::read_saved(robot).await?;
+    let after_file = file("restore-after.txt");
+    std::fs::write(&after_file, &after.envelope)?;
+    Ok(RestoreReport {
+        before_file,
+        before_live_file,
+        after_file,
+        requests: served.requests,
+        settings,
+        diff: mapedit::diff(&saved.map, &after.map),
+    })
+}
+
 /// Runs a grid edit on the robot: fresh backup (unless [`Options::archive`]), edit, restore of
 /// the oldest original (if [`Options::prime`]), restore of the edited archive from this machine,
 /// then the per-room settings put back. `progress` gets one line per step. Writes to the robot;
@@ -355,35 +496,8 @@ pub async fn apply(robot: &CloudRobot, edit: &GridEdit, opts: &Options, progress
     }
     let edited_file = file("edited.tbz2");
     std::fs::write(&edited_file, &edited)?;
-    let hint = || revert_hint(backup_file.as_deref(), &before_live_file);
-    let mut pointer = saved.pointer.clone();
-    if opts.prime {
-        let l = recovery::list(c, dev).await?;
-        let e = prime_entry(&l, map_id).ok_or_else(|| anyhow!("no original entry of map {map_id} to restore first"))?.clone();
-        progress(&format!("restoring the original entry (time {}) first", e.time));
-        let url = recovery::archive_url(c, dev, &e).await?;
-        let old = pointer.clone();
-        let r = recovery::restore_until(c, dev, map_id, &url, Wait::default(), || saved_moved(robot, &old)).await?;
-        progress(&job_line("restore of the original", &r));
-        if !r.succeeded() {
-            bail!("stopped before the edited restore; {}", hint());
-        }
-        pointer = wait_saved_change(robot, &pointer, 60).await?.pointer;
-    }
-    progress(&format!("restoring the edited archive from this machine, port {}", opts.port));
-    let old = pointer.clone();
-    let served = serve_and_restore(c, dev, map_id, &server, edited, Wait::default(), || saved_moved(robot, &old)).await?;
-    progress(&job_line("restore of the edited archive", &served.job));
-    // The robot can report a failure and still load the archive on a retry (after a late
-    // firewall answer, for one), so the saved map decides.
-    let s = wait_saved_change(robot, &pointer, 60).await?;
-    if s.pointer == pointer {
-        let why = if server.requests().is_empty() { " (no request reached this machine: check the firewall)" } else { "" };
-        bail!("the edited archive was not loaded{why}; {}", hint());
-    }
-    if !served.job.succeeded() {
-        progress("the restore reported a failure, but the saved map changed: going on");
-    }
+    let hint = revert_hint(backup_file.as_deref(), &before_live_file);
+    load_archive(robot, &server, map_id, &saved.pointer, edited, opts.prime, &hint, progress).await?;
     progress("putting back the per-room settings");
     // A new room gets the settings of the room it came from; a removed room has none to get.
     let mut snapshot = saved.map.clone();
@@ -397,16 +511,7 @@ pub async fn apply(robot: &CloudRobot, edit: &GridEdit, opts: &Options, progress
     if let GridEdit::RemoveRoom { room, .. } = *edit {
         snapshot.rooms.remove(&u32::from(room));
     }
-    let settings = mapedit::apply(
-        robot,
-        &mapedit::Edit::RestoreSettings(Box::new(snapshot)),
-        &opts.dir,
-        &format!("{}-settings", opts.stamp),
-        mapedit::Wait::default(),
-    )
-    .await
-    .map(|r| r.code)
-    .map_err(|e| format!("{e:#}"));
+    let settings = put_back_settings(robot, snapshot, &opts.dir, &opts.stamp).await;
     progress(
         "note: the live frame shows 0 as every room's cleaning-order position until the next cleaning run; \
          the saved map keeps the order (W23, W26)",
