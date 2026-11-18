@@ -71,6 +71,8 @@ pub fn language_picker(ui: &mut egui::Ui, choice: &mut Option<String>) -> bool {
 }
 
 fn main() -> eframe::Result {
+    let paths = Paths::system();
+    log_panics(&paths);
     if let Err(e) = dreame_i18n::add_catalog(Language::PortugueseBrazil, PT_BR) {
         eprintln!("the pt-BR catalog does not parse: {e}");
     }
@@ -82,11 +84,11 @@ fn main() -> eframe::Result {
             .with_icon(eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon-256.png")).unwrap_or_default()),
         ..Default::default()
     };
-    eframe::run_native(
+    let log = paths.log.clone();
+    let result = eframe::run_native(
         "dreame-control",
         options,
-        Box::new(|cc| {
-            let paths = Paths::system();
+        Box::new(move |cc| {
             keep_running_on_gpu_errors(cc, &paths);
             let backend = Backend::new(cc.egui_ctx.clone(), paths.clone()).map_err(|e| e.to_string())?;
             let prefs = Prefs::load(&paths);
@@ -94,7 +96,35 @@ fn main() -> eframe::Result {
             backend.resume();
             Ok(Box::new(App::new(backend, prefs)))
         }),
-    )
+    );
+    if let Err(e) = &result {
+        config::log_line(&log, &one_line(&format!("The app could not start: {e}")));
+    }
+    result
+}
+
+/// Writes every panic to the log file, then reports it as before.
+///
+/// A release build on Windows has no console, so without this a panic closed the app and left
+/// no trace of what failed. The line names the thread and the place in the source.
+fn log_panics(paths: &Paths) {
+    let log = paths.log.clone();
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let thread = std::thread::current();
+        config::log_line(&log, &panic_line(thread.name(), info));
+        previous(info);
+    }));
+}
+
+/// The log line for a panic: the thread, then the message with the file, line and column.
+fn panic_line(thread: Option<&str>, info: &dyn std::fmt::Display) -> String {
+    one_line(&format!("Panic in thread {}: {info}", thread.unwrap_or("unnamed")))
+}
+
+/// Joins the lines of `text` with spaces, since the log keeps one line per entry.
+fn one_line(text: &str) -> String {
+    text.lines().map(str::trim).filter(|l| !l.is_empty()).collect::<Vec<_>>().join(" ")
 }
 
 /// Keeps the window within what the GPU can draw, and logs GPU errors that nothing else handles.
@@ -317,4 +347,30 @@ fn centered(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
             add(ui);
         });
     });
+}
+
+#[cfg(test)]
+mod panic_log_tests {
+    use super::*;
+
+    #[test]
+    fn panic_line_is_one_line_with_thread_and_place() {
+        let info = "panicked at src/home.rs:12:5:\nindex out of bounds";
+        assert_eq!(panic_line(Some("main"), &info), "Panic in thread main: panicked at src/home.rs:12:5: index out of bounds");
+        assert_eq!(panic_line(None, &"boom"), "Panic in thread unnamed: boom");
+    }
+
+    #[test]
+    fn a_panic_is_written_to_the_log() {
+        let dir = std::env::temp_dir().join(format!("dreame-panic-log-{}", std::process::id()));
+        let paths = Paths::in_dir(dir.clone());
+        log_panics(&paths);
+        let joined = std::thread::Builder::new().name("worker".into()).spawn(|| panic!("test panic")).unwrap().join();
+        assert!(joined.is_err());
+        let log = std::fs::read_to_string(&paths.log).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let line = log.lines().find(|l| l.contains("test panic")).expect("the panic is logged");
+        assert!(line.contains("Panic in thread worker: panicked at "), "{line}");
+        assert!(line.contains("main.rs:"), "{line}");
+    }
 }
