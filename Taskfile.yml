@@ -103,6 +103,16 @@ tasks:
     cmds:
       - powershell -ExecutionPolicy Bypass -File apps/dreame-desktop/packaging/windows/package.ps1 {{.CLI_ARGS}}
 
+  app:package:macos:
+    desc: "Package dreame-desktop for macOS into dist/ (DMG and zip), signed ad hoc, e.g. `task app:package:macos -- 0.2.0`."
+    cmds:
+      - bash apps/dreame-desktop/packaging/macos/package.sh {{.CLI_ARGS}}
+
+  app:package:macos:notarize:
+    desc: "Package dreame-desktop for macOS, signed with your Developer ID and notarized, e.g. `task app:package:macos:notarize -- 0.2.0`. Needs the notarytool profile mac-apps; see apps/dreame-desktop/packaging/macos/package.sh."
+    cmds:
+      - bash apps/dreame-desktop/packaging/macos/package.sh --notarize {{.CLI_ARGS}}
+
   map:snapshot:
     desc: Save the current saved map to local/out/snapshots.
     cmds:

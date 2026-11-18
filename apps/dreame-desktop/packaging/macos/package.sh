@@ -3,7 +3,14 @@
 # into dist/:
 #   DreameControl-<version>-macos-arm64.dmg  (drag the app to Applications)
 #   DreameControl-<version>-macos-arm64.zip  (the app alone)
-# Usage, from the repository root:  bash apps/dreame-desktop/packaging/macos/package.sh 0.2.0
+# Usage, from the repository root:
+#   bash apps/dreame-desktop/packaging/macos/package.sh 0.2.0              signed ad hoc
+#   bash apps/dreame-desktop/packaging/macos/package.sh --notarize 0.2.0   signed and notarized
+#
+# --notarize fills in the two settings below that are not set: the Developer ID Application
+# identity found in the keychain, and the notarytool keychain profile "mac-apps". Make that
+# profile once, from an App Store Connect API key:
+#   xcrun notarytool store-credentials mac-apps --key <file.p8> --key-id <key id> --issuer <issuer id>
 #
 # Signing depends on these environment variables:
 #   DREAME_SIGN_IDENTITY    a "Developer ID Application: Name (TEAMID)" identity in the keychain.
@@ -20,7 +27,25 @@
 # With either, the DMG is sent to Apple for notarization and the ticket is stapled to the DMG
 # and to the app.
 set -euo pipefail
-VERSION="$1"
+NOTARIZE=0
+if [ "${1:-}" = --notarize ]; then
+  NOTARIZE=1
+  shift
+fi
+VERSION="${1:?usage: package.sh [--notarize] <version>}"
+if [ "$NOTARIZE" -eq 1 ]; then
+  if [ -z "${DREAME_SIGN_IDENTITY:-}" ]; then
+    DREAME_SIGN_IDENTITY="$(security find-identity -v -p codesigning \
+      | sed -n 's/.*"\(Developer ID Application: .*\)"$/\1/p' | head -1)"
+    if [ -z "$DREAME_SIGN_IDENTITY" ]; then
+      echo "package.sh: --notarize needs a Developer ID Application identity, and the keychain has none." >&2
+      exit 1
+    fi
+  fi
+  if [ -z "${DREAME_NOTARY_KEY:-}" ]; then
+    DREAME_NOTARY_PROFILE="${DREAME_NOTARY_PROFILE:-mac-apps}"
+  fi
+fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ASSETS="$HERE/../../assets"
 SIGN_IDENTITY="${DREAME_SIGN_IDENTITY:-}"

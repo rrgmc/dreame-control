@@ -46,7 +46,7 @@ Each script builds a release program and writes the packages into `dist/`.
 | System | Command | Needs |
 |---|---|---|
 | Windows | `task app:package -- 0.2.0` | Inno Setup 6 |
-| macOS | `bash apps/dreame-desktop/packaging/macos/package.sh 0.2.0` | Xcode command line tools, the Rust target `aarch64-apple-darwin` |
+| macOS | `task app:package:macos -- 0.2.0`, or `task app:package:macos:notarize -- 0.2.0` to sign and notarize | Xcode command line tools, the Rust target `aarch64-apple-darwin` |
 | Linux | `bash apps/dreame-desktop/packaging/linux/package.sh 0.2.0` | `curl` and the libraries above |
 
 ## Android app
