@@ -82,6 +82,15 @@ impl MapView {
         }
     }
 
+    /// Drops the line or rectangle being dragged, so releasing the button draws nothing.
+    /// Returns whether one was being dragged.
+    pub fn cancel_drag(&mut self) -> bool {
+        let dragging = self.drag_from.is_some();
+        self.drag_from = None;
+        self.drag_to = None;
+        dragging
+    }
+
     /// World mm per screen point at the current zoom.
     pub fn mm_per_point(&self, map: &Map) -> f64 {
         let zoom = self.view.map_or(1.0, |v| v.zoom);

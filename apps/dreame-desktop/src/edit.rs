@@ -197,8 +197,37 @@ impl EditMap {
         self.outcome = None;
     }
 
+    /// Esc undoes one step: the drag in progress, then the change drawn, then the rooms or
+    /// zone picked, then the tool, back to Select.
+    fn escape(&mut self) {
+        if self.view.cancel_drag() {
+            return;
+        }
+        if self.staged.is_some() || self.problem.is_some() {
+            self.staged = None;
+            self.problem = None;
+            self.outcome = None;
+            // The room picked for a deletion is only the deletion itself.
+            if self.tool == Tool::Remove {
+                self.room = None;
+            }
+        } else if self.room.is_some() || self.selected.is_some() {
+            self.reset();
+        } else if self.tool != Tool::Select {
+            self.tool = Tool::Select;
+            self.reset();
+        } else {
+            self.outcome = None;
+        }
+    }
+
     pub fn ui(&mut self, ui: &mut egui::Ui, backend: &Backend, can_edit: bool) -> EditExit {
         let mut exit = EditExit::Stay;
+        // An open dialog takes Esc itself and closes.
+        let dialog = self.unhide.is_some() || self.restore.is_some() || self.rename.is_some();
+        if !self.saving && !dialog && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+            self.escape();
+        }
         egui::Panel::top("edit-top").show(ui, |ui| {
             ui.add_space(4.0);
             ui.horizontal(|ui| {
