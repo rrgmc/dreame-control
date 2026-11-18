@@ -104,7 +104,7 @@ enum class Target(@param:StringRes val label: Int) {
 }
 
 /** A page over the map. */
-private enum class Page { Rooms, Robot, History, Schedules }
+private enum class Page { Rooms, Robot, History, Schedules, EditMap }
 
 /** A question before a command that ends the job. */
 private enum class Ask { End, Dock }
@@ -201,6 +201,11 @@ fun HomeScreen(dreame: Dreame) {
             SchedulesScreen(dreame, onBack = { page = null })
             return
         }
+        Page.EditMap -> {
+            BackHandler { page = null }
+            EditScreen(dreame, onBack = { page = null })
+            return
+        }
         null -> {}
     }
 
@@ -231,6 +236,11 @@ fun HomeScreen(dreame: Dreame) {
                         DropdownMenu(menu, { menu = false }) {
                             DropdownMenuItem(text = { Text(stringResource(R.string.schedules_title)) }, onClick = { menu = false; page = Page.Schedules })
                             DropdownMenuItem(text = { Text(stringResource(R.string.history_title)) }, onClick = { menu = false; page = Page.History })
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.edit_map)) },
+                                onClick = { menu = false; page = Page.EditMap },
+                                enabled = map != null,
+                            )
                             DropdownMenuItem(text = { Text(stringResource(R.string.reload_map)) }, onClick = { menu = false; dreame.loadMap() })
                             DropdownMenuItem(text = { Text(stringResource(R.string.app_settings)) }, onClick = { menu = false; settingsOpen = true })
                             if (dreame.devices.size > 1) {

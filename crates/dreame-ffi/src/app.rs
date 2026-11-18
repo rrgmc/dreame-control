@@ -375,21 +375,21 @@ pub trait HomeListener: Send + Sync {
 /// The saved map.
 #[derive(uniffi::Object)]
 pub struct HomeMap {
-    map: Map,
+    pub(crate) map: Map,
     labels: std::collections::BTreeMap<u32, Point>,
 }
 
 impl HomeMap {
-    fn new(map: Map) -> Self {
+    pub(crate) fn new(map: Map) -> Self {
         Self { labels: map.label_points(), map }
     }
 
-    fn to_cell(&self, p: Point) -> CellPoint {
+    pub(crate) fn to_cell(&self, p: Point) -> CellPoint {
         let (x, y) = self.map.transform().world_to_image(p.x, p.y, 1.0);
         CellPoint { x, y }
     }
 
-    fn to_world(&self, x: f64, y: f64) -> Point {
+    pub(crate) fn to_world(&self, x: f64, y: f64) -> Point {
         let (x, y) = self.map.transform().image_to_world(x, y, 1.0);
         Point::new(x, y)
     }
@@ -452,10 +452,11 @@ impl HomeMap {
         Ok(render_png(&m, &opts)?)
     }
 
-    /// The rooms in the saved cleaning order.
+    /// The shown rooms in the saved cleaning order, then the hidden rooms.
     pub fn rooms(&self) -> Vec<RoomInfo> {
         dreame::shapes::initial_order(&self.map)
             .into_iter()
+            .chain(self.map.hidden_rooms())
             .filter_map(|id| self.map.rooms.get(&id))
             .map(|r| RoomInfo {
                 id: r.id,
@@ -521,7 +522,7 @@ struct State {
     map: Option<Arc<HomeMap>>,
 }
 
-struct Inner {
+pub(crate) struct Inner {
     /// Swapped once background discovery finishes; see [`Inner::discover`].
     robot: RwLock<Arc<Robot<CloudRobot>>>,
     name: String,
@@ -590,7 +591,7 @@ impl Inner {
         self.listener.lock().expect("listener lock").clone()
     }
 
-    fn map(&self) -> Option<Arc<HomeMap>> {
+    pub(crate) fn map(&self) -> Option<Arc<HomeMap>> {
         self.state.lock().expect("state lock").map.clone()
     }
 
@@ -644,7 +645,7 @@ impl Inner {
         }
     }
 
-    async fn edit(self: &Arc<Self>, e: Edit) -> Result<Arc<HomeMap>> {
+    pub(crate) async fn edit(self: &Arc<Self>, e: Edit) -> Result<Arc<HomeMap>> {
         let dir = self.files.join("edits");
         mapedit::apply(self.robot().cloud_link(), &e, &dir, &dreame::session::stamp(), Default::default()).await?;
         self.reload().await
@@ -654,7 +655,7 @@ impl Inner {
 /// One robot, for the home screen.
 #[derive(uniffi::Object)]
 pub struct HomeRobot {
-    inner: Arc<Inner>,
+    pub(crate) inner: Arc<Inner>,
 }
 
 #[uniffi::export(async_runtime = "tokio")]

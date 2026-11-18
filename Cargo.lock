@@ -1308,6 +1308,7 @@ dependencies = [
  "dreame-i18n",
  "dreame-map",
  "dreame-model",
+ "serde_json",
  "tokio",
  "uniffi",
 ]

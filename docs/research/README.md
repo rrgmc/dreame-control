@@ -47,7 +47,7 @@ The first checks ran with throwaway prototypes (a LAN probe, a cloud client and 
 
 ### Open
 
-1. **Map editing in `dreame-android`.** The facade's edit flow (snapshot, apply, read back) is used by the desktop apps but not yet by the Android app.
+1. **Advanced map editing in `dreame-android`.** The Android app has the desktop app's standard edit tools: rename, divide and merge rooms, show a hidden room, and add or delete no-go zones, no-mop zones and virtual walls. It lacks the advanced tools that work through a backup and restore of the map (move a border, delete a room), which need the robot to fetch the edited archive from the phone.
 2. **An iOS app.** `dreame-ffi` makes Swift bindings, but no iOS app uses them.
 3. **Camera streaming.** The r2579a reports `CAMERA_STREAMING`. The library detects it, but there is no stream client.
 4. **Untested writes.** The "Not yet tested" list in [l40-ultra-ae.md](l40-ultra-ae.md) covers the untested actions, settings and map edit commands, and the refresh token lifetime. P-frame merging, unsigned request bodies, old refresh tokens and the stop action were checked on 2026-11-17. The writes need the user's approval, one at a time.

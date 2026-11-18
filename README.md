@@ -73,7 +73,7 @@ The only tested robot is the Dreame L40 Ultra AE (`dreame.vacuum.r2579a`). Other
 | Maintenance: remaining life of brushes, filters and pads | Yes | Yes |
 | Cleaning history with the map and path of each job | Yes | Yes |
 | Notifications when a job ends or the robot needs help | Yes | Yes |
-| Map editing: rename, divide and merge rooms; no-go zones, no-mop zones, virtual walls | Yes | No |
+| Map editing: rename, divide and merge rooms; no-go zones, no-mop zones, virtual walls | Yes | Yes |
 | Drive the robot by hand | Yes | No |
 | Photos of the obstacles and pets the robot recognised | Yes | No |
 

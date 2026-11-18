@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
@@ -67,7 +68,9 @@ fun RoomsScreen(dreame: Dreame, onBack: () -> Unit) {
     LaunchedEffect(Unit) { dreame.notes.collect { snackbar.showSnackbar(it.text, withDismissAction = it.error) } }
 
     val m = map ?: return
-    val saved = m.rooms.map { it.id }
+    // Hidden rooms are not cleaned, so they have no place in the order; they follow it.
+    val saved = m.rooms.filter { !it.hidden }.map { it.id }
+    val hidden = m.rooms.filter { it.hidden }.map { it.id }
     // The order being edited; it follows the map until the user moves a room.
     var order by remember(m.version) { mutableStateOf(saved) }
     var saving by remember { mutableStateOf<UInt?>(null) }
@@ -132,6 +135,19 @@ fun RoomsScreen(dreame: Dreame, onBack: () -> Unit) {
                     onChange = { what, change -> save(room, what, change) },
                 )
             }
+            items(hidden, key = { it.toLong() }) { id ->
+                val room = m.room(id) ?: return@items
+                RoomCard(
+                    room, -1, 0, wetness, locked, saving == id,
+                    onMove = {},
+                    onShown = { shown ->
+                        val what = context.getString(R.string.busy_show_room, room.name)
+                        saving = id
+                        dreame.saveRooms(what, done = { saving = null }) { it.setRoomShown(id, shown) }
+                    },
+                    onChange = { _, _ -> },
+                )
+            }
         }
     }
 }
@@ -139,6 +155,7 @@ fun RoomsScreen(dreame: Dreame, onBack: () -> Unit) {
 @Composable
 private fun RoomCard(
     room: RoomInfo,
+    /** Its place in the cleaning order; -1 for a hidden room, which has none. */
     index: Int,
     count: Int,
     wetness: Boolean,
@@ -152,8 +169,10 @@ private fun RoomCard(
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${index + 1}", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(12.dp))
+                if (index >= 0) {
+                    Text("${index + 1}", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(12.dp))
+                }
                 Text(
                     room.name,
                     style = MaterialTheme.typography.titleMedium,
@@ -168,11 +187,13 @@ private fun RoomCard(
                         stringResource(if (room.hidden) R.string.cd_room_hidden else R.string.cd_room_shown),
                     )
                 }
-                IconButton(onClick = { onMove(true) }, enabled = !locked && index > 0) {
-                    Icon(Icons.Outlined.KeyboardArrowUp, stringResource(R.string.cd_clean_earlier))
-                }
-                IconButton(onClick = { onMove(false) }, enabled = !locked && index + 1 < count) {
-                    Icon(Icons.Outlined.KeyboardArrowDown, stringResource(R.string.cd_clean_later))
+                if (index >= 0) {
+                    IconButton(onClick = { onMove(true) }, enabled = !locked && index > 0) {
+                        Icon(Icons.Outlined.KeyboardArrowUp, stringResource(R.string.cd_clean_earlier))
+                    }
+                    IconButton(onClick = { onMove(false) }, enabled = !locked && index + 1 < count) {
+                        Icon(Icons.Outlined.KeyboardArrowDown, stringResource(R.string.cd_clean_later))
+                    }
                 }
             }
             if (room.hidden) {

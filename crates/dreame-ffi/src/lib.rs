@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex};
 uniffi::setup_scaffolding!();
 
 pub mod app;
+pub mod edit;
 
 /// What went wrong, by kind. The message never contains credentials or ids.
 #[derive(Debug, uniffi::Error)]
