@@ -2,11 +2,12 @@
 //! and saves it to the robot. One change is saved at a time, as in the official app.
 //!
 //! Standard tools: rename, divide and merge rooms; add no-go zones, no-mop zones and virtual
-//! walls; delete one by clicking it. With advanced editing on (Settings), two tools work
+//! walls; delete one by clicking it. With advanced editing on (Settings), three tools work
 //! through a backup and restore of the map: "Move a border" redraws the border between two
-//! rooms, "Delete a room" gives a room's floor to a neighbour and removes the room, and "Erase
-//! floor" makes floor that does not exist outside the map. Hidden rooms can be deleted too. The same setting adds "Map backup": back up the map to a file, and
-//! restore it from one.
+//! rooms, "Delete a room" takes a room and its floor off the map, and "Erase floor" takes the
+//! floor in a rectangle off the map. Both are for floor that does not exist; merging joins a
+//! real room to its neighbour. Hidden rooms can be deleted too. The same setting adds "Map
+//! backup": back up the map to a file, and restore it from one.
 
 use crate::backend::{Backend, LoadedMap, Msg, SharedRobot};
 use crate::mapview::{Drag, Mark, MapInput, MapView, Overlay};
@@ -54,13 +55,15 @@ impl Tool {
                  settings stay. Saving takes a few minutes.",
             ),
             Tool::Remove => tr(
-                "Click the room to delete, hidden or not, then a room next to it. That room takes \
-                 the floor and keeps its name and settings. Saving takes a few minutes.",
+                "Click a room, hidden or not, whose floor does not exist. The room and its floor \
+                 leave the map. To join a real room to its neighbour, merge the two rooms instead. \
+                 Saving takes a few minutes. This is new: the robot may map the floor again if it \
+                 still sees floor there.",
             ),
             Tool::Erase => tr(
-                "Drag a rectangle over floor that does not exist, or click a room to erase all of it. \
-                 The floor leaves the map, and a room left without floor is deleted. Saving takes a few minutes. This is new: the robot may map \
-                 the area again if it still sees floor there.",
+                "Drag a rectangle over floor that does not exist. The floor leaves the map, and a \
+                 room left without floor is deleted. Saving takes a few minutes. This is new: the \
+                 robot may map the area again if it still sees floor there.",
             ),
         }
     }
@@ -226,15 +229,12 @@ impl EditMap {
             let coloured: Vec<u32> = match (self.tool, self.room, &self.staged) {
                 (_, _, Some(Staged::Map(Edit::MergeRooms(a, b)))) => vec![*a, *b],
                 (_, _, Some(Staged::Erase(e))) => e.cells.keys().copied().collect(),
-                (_, _, Some(Staged::Grid { edit: GridEdit::RemoveRoom { room, into }, .. })) => {
-                    vec![u32::from(*room), u32::from(*into)]
-                }
                 (Tool::Border, Some(a), Some(Staged::Grid { edit: GridEdit::Border { b, .. }, .. })) => vec![a, u32::from(*b)],
                 (Tool::Border, Some(a), _) => match self.selected {
                     Some(Selection::Room(b)) => vec![a, b],
                     _ => vec![a],
                 },
-                (Tool::Divide | Tool::Merge | Tool::Remove, Some(r), _) => vec![r],
+                (Tool::Divide | Tool::Merge, Some(r), _) => vec![r],
                 _ => match self.selected {
                     Some(Selection::Room(r)) => vec![r],
                     _ => Vec::new(),
@@ -471,18 +471,13 @@ impl EditMap {
                 }
                 None => self.problem = Some(tr("Drag the line across a room.").into()),
             },
-            (Tool::Merge | Tool::Border | Tool::Remove, MapInput::Click(p)) => {
-                // Hidden rooms may be merged or deleted too, such as a grey area beside a room.
+            (Tool::Merge | Tool::Border, MapInput::Click(p)) => {
+                // Hidden rooms may be merged too, such as a grey area beside a room.
                 let Some(r) = self.map.room_at(p) else { return };
                 match self.room {
                     Some(first) if first != r && shapes::merge_partners(&self.map, first).contains(&r) => {
                         if self.tool == Tool::Merge {
                             self.stage(Staged::Map(Edit::MergeRooms(first, r)));
-                        } else if self.tool == Tool::Remove {
-                            match shapes::remove_room_edit(&self.map, first, r) {
-                                Some(edit) => self.stage(Staged::Grid { edit, line: None }),
-                                None => self.problem = Some(tr("These rooms cannot be changed this way.").into()),
-                            }
                         } else {
                             self.staged = None;
                             self.problem = None;
@@ -527,10 +522,10 @@ impl EditMap {
                     }
                 }
             }
-            (Tool::Erase, MapInput::Click(p)) => {
+            (Tool::Remove, MapInput::Click(p)) => {
                 // Hidden rooms too: they are often the floor that does not exist.
-                if let Some(e) = self.map.room_at(p).and_then(|r| shapes::erase_room_edit(&self.map, r)) {
-                    self.stage(Staged::Erase(e));
+                if let Some(r) = self.map.room_at(p) {
+                    self.start_remove(r);
                 }
             }
             (Tool::Erase, MapInput::Rect(a, b)) => match shapes::erase_edit(&self.map, a, b, SNAP_MM) {
@@ -672,10 +667,10 @@ impl EditMap {
                     &[("room", &self.room_name(u32::from(*a))), ("other", &self.room_name(u32::from(*b)))],
                 )
             }
-            Staged::Grid { edit: GridEdit::RemoveRoom { room, into }, .. } => trf(
-                "Delete {room}; {other} takes its floor",
-                &[("room", &self.room_name(u32::from(*room))), ("other", &self.room_name(u32::from(*into)))],
-            ),
+            Staged::Erase(e) if e.rect.is_none() => {
+                let rooms = e.emptied.iter().map(|r| self.room_name(*r)).collect::<Vec<_>>().join(", ");
+                trf("Delete {room} and its floor", &[("room", &rooms)])
+            }
             Staged::Erase(e) => {
                 let n: usize = e.cells.values().sum();
                 let erase = trn("Erase {n} floor cell", "Erase {n} floor cells", n as i64, &[]);
@@ -690,11 +685,16 @@ impl EditMap {
         }
     }
 
-    /// Switches to "Delete a room" with `id`, hidden or not, as the room to delete.
+    /// Switches to "Delete a room" and stages the deletion of `id`, hidden or not: its floor
+    /// leaves the map.
     fn start_remove(&mut self, id: u32) {
         self.tool = Tool::Remove;
         self.reset();
         self.room = Some(id);
+        match shapes::erase_room_edit(&self.map, id) {
+            Some(e) => self.stage(Staged::Erase(e)),
+            None => self.problem = Some(tr("These rooms cannot be changed this way.").into()),
+        }
     }
 
     fn visible(&self, id: u32) -> bool {

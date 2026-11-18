@@ -256,15 +256,6 @@ pub fn merge_partners(map: &Map, id: u32) -> Vec<u32> {
     map.rooms.keys().copied().filter(|&o| o != id && map.are_neighbours(id, o)).collect()
 }
 
-/// The archive edit that deletes room `room` and gives its floor to `into`: `None` unless the two
-/// rooms touch and both ids fit the grid image. Hidden rooms may be deleted, and may take a floor.
-pub fn remove_room_edit(map: &Map, room: u32, into: u32) -> Option<GridEdit> {
-    if !merge_partners(map, room).contains(&into) {
-        return None;
-    }
-    Some(GridEdit::RemoveRoom { room: u8::try_from(room).ok()?, into: u8::try_from(into).ok()? })
-}
-
 /// An erase built from a drawn rectangle by [`erase_edit`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct Erase {
@@ -545,18 +536,6 @@ mod tests {
         let m = two_rooms();
         assert_eq!(merge_partners(&m, 1), [2]);
         assert_eq!(merge_partners(&m, 2), [1]);
-    }
-
-    #[test]
-    fn remove_room_needs_a_neighbour() {
-        let mut m = two_rooms();
-        assert_eq!(remove_room_edit(&m, 2, 1), Some(GridEdit::RemoveRoom { room: 2, into: 1 }));
-        assert_eq!(remove_room_edit(&m, 1, 1), None);
-        assert_eq!(remove_room_edit(&m, 1, 3), None);
-        // A hidden room can be deleted, and can take the floor.
-        m.rooms.get_mut(&2).unwrap().hidden = true;
-        assert_eq!(remove_room_edit(&m, 2, 1), Some(GridEdit::RemoveRoom { room: 2, into: 1 }));
-        assert_eq!(remove_room_edit(&m, 1, 2), Some(GridEdit::RemoveRoom { room: 1, into: 2 }));
     }
 
     #[test]
