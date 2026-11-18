@@ -28,3 +28,6 @@ dreame-model.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
 uniffi = { workspace = true, features = ["tokio"] }
+
+[dev-dependencies]
+serde_json.workspace = true

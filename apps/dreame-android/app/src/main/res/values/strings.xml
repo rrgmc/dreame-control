@@ -107,7 +107,7 @@
     <string name="ask_dock_title">Return to the dock?</string>
     <string name="ask_dock_text">The current job ends and the robot goes back to its dock.</string>
     <string name="ask_dock_button">Return to dock</string>
-    <string name="hidden_room_note">This grey area is hidden, so the robot does not clean it. To show it again, turn it on in Rooms.</string>
+    <string name="hidden_room_note">This grey area is hidden, so the robot does not clean it. To show it again, tap it in Edit map or turn it on in Rooms.</string>
     <string name="link_live">Live updates on</string>
     <string name="link_connecting">Connecting for live updates</string>
     <string name="link_offline">No live updates; the status is read every 20 seconds</string>
@@ -273,4 +273,38 @@
     <string name="add_room">Add a room</string>
     <string name="add_room_hint">Add at least one room.</string>
     <string name="cd_remove">Remove %1$s</string>
+    <!-- Map editing -->
+    <string name="edit_map">Edit map</string>
+    <string name="tool_select">Select</string>
+    <string name="tool_divide">Divide</string>
+    <string name="tool_merge">Merge</string>
+    <string name="tool_no_go">No-go zone</string>
+    <string name="tool_no_mop">No-mop zone</string>
+    <string name="tool_wall">Virtual wall</string>
+    <string name="hint_select">Tap a room to rename, divide or merge it. Tap a zone or wall to delete it.</string>
+    <string name="hint_divide">Tap the room to divide, then drag a line across it, from wall to wall.</string>
+    <string name="hint_merge">Tap two rooms that touch each other.</string>
+    <string name="hint_no_go">Drag a rectangle. The robot will not enter it.</string>
+    <string name="hint_no_mop">Drag a rectangle. The robot will vacuum but not mop there.</string>
+    <string name="hint_wall">Drag a line. The robot will not cross it.</string>
+    <string name="hint_two_fingers">Move the map with two fingers.</string>
+    <string name="edit_needs_idle">The map can be edited while the robot is not cleaning.</string>
+    <string name="edit_one_at_a_time">Changes are saved one at a time.</string>
+    <string name="rename">Rename</string>
+    <string name="merge_with_neighbour">Merge with a neighbour</string>
+    <string name="delete_no_go">Delete this no-go zone</string>
+    <string name="delete_no_mop">Delete this no-mop zone</string>
+    <string name="delete_wall">Delete this virtual wall</string>
+    <string name="discard">Discard</string>
+    <string name="busy_save_change">Saving to the robot</string>
+    <string name="saving_change">Saving to the robot. This can take a minute.</string>
+    <string name="problem_divide_line">Drag the line across a room.</string>
+    <string name="problem_too_small">That is too small. Drag a bigger shape.</string>
+    <string name="problem_not_touching">%1$s does not touch %2$s. Pick a room next to it.</string>
+    <string name="hidden_area">Hidden area</string>
+    <string name="hidden_area_text">%1$s is hidden, so the robot does not clean it. Show it again?</string>
+    <string name="show_it">Show it</string>
+    <string name="rename_title">Rename %1$s</string>
+    <string name="name_new_room">Name the new room</string>
+    <string name="room_name">Room name</string>
 </resources>

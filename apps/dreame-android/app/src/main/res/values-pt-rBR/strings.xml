@@ -103,7 +103,7 @@
     <string name="ask_dock_title">Voltar à base?</string>
     <string name="ask_dock_text">A limpeza atual termina e o robô volta para a base.</string>
     <string name="ask_dock_button">Voltar à base</string>
-    <string name="hidden_room_note">Esta área cinza está oculta, então o robô não a limpa. Para mostrá-la de novo, ative-a em Cômodos.</string>
+    <string name="hidden_room_note">Esta área cinza está oculta, então o robô não a limpa. Para mostrá-la de novo, toque nela em Editar mapa ou ative-a em Cômodos.</string>
     <string name="link_live">Atualizações ao vivo ativas</string>
     <string name="link_connecting">Conectando para atualizações ao vivo</string>
     <string name="link_offline">Sem atualizações ao vivo; o status é lido a cada 20 segundos</string>
@@ -272,4 +272,38 @@
     <string name="add_room">Adicionar um cômodo</string>
     <string name="add_room_hint">Adicione pelo menos um cômodo.</string>
     <string name="cd_remove">Remover %1$s</string>
+    <!-- Map editing -->
+    <string name="edit_map">Editar mapa</string>
+    <string name="tool_select">Selecionar</string>
+    <string name="tool_divide">Dividir</string>
+    <string name="tool_merge">Juntar</string>
+    <string name="tool_no_go">Zona proibida</string>
+    <string name="tool_no_mop">Zona sem pano</string>
+    <string name="tool_wall">Parede virtual</string>
+    <string name="hint_select">Toque em um cômodo para renomear, dividir ou juntar. Toque em uma zona ou parede para excluí-la.</string>
+    <string name="hint_divide">Toque no cômodo a dividir e arraste uma linha atravessando-o, de parede a parede.</string>
+    <string name="hint_merge">Toque em dois cômodos vizinhos.</string>
+    <string name="hint_no_go">Arraste um retângulo. O robô não entrará nele.</string>
+    <string name="hint_no_mop">Arraste um retângulo. O robô vai aspirar, mas não passar pano ali.</string>
+    <string name="hint_wall">Arraste uma linha. O robô não vai atravessá-la.</string>
+    <string name="hint_two_fingers">Mova o mapa com dois dedos.</string>
+    <string name="edit_needs_idle">O mapa pode ser editado enquanto o robô não está limpando.</string>
+    <string name="edit_one_at_a_time">As alterações são salvas uma de cada vez.</string>
+    <string name="rename">Renomear</string>
+    <string name="merge_with_neighbour">Juntar com um vizinho</string>
+    <string name="delete_no_go">Excluir esta zona proibida</string>
+    <string name="delete_no_mop">Excluir esta zona sem pano</string>
+    <string name="delete_wall">Excluir esta parede virtual</string>
+    <string name="discard">Descartar</string>
+    <string name="busy_save_change">Salvando no robô</string>
+    <string name="saving_change">Salvando no robô. Isso pode levar um minuto.</string>
+    <string name="problem_divide_line">Arraste a linha atravessando um cômodo.</string>
+    <string name="problem_too_small">Ficou pequeno demais. Arraste uma forma maior.</string>
+    <string name="problem_not_touching">%1$s não é vizinho de %2$s. Escolha um cômodo ao lado.</string>
+    <string name="hidden_area">Área oculta</string>
+    <string name="hidden_area_text">%1$s está oculto, então o robô não o limpa. Mostrar de novo?</string>
+    <string name="show_it">Mostrar</string>
+    <string name="rename_title">Renomear %1$s</string>
+    <string name="name_new_room">Dê um nome ao novo cômodo</string>
+    <string name="room_name">Nome do cômodo</string>
 </resources>

@@ -100,12 +100,26 @@ data class Overlay(
     val zoneEditable: Boolean = false,
     /** Room names to show instead of the map's own, such as the saved map's on a job's map. */
     val names: Map<UInt, String> = emptyMap(),
+    /** Shapes drawn on top, such as a map change waiting to be saved. */
+    val marks: List<Mark> = emptyList(),
+    /** Show hidden rooms' names too, greyed. */
+    val hiddenLabels: Boolean = false,
 )
+
+/** A line or rectangle from [a] to [b] in cell space, drawn over the map. */
+data class Mark(val a: Offset, val b: Offset, val line: Boolean, val color: Color)
+
+/** What a one-finger drag does: pan the map, or draw a line or a rectangle. */
+enum class DrawMode { Pan, Line, Rect }
+
+/** A drag that draws, in cell space: [b] follows the finger until [done]. */
+data class Drawn(val a: Offset, val b: Offset, val done: Boolean)
 
 /**
  * The map: rooms rendered by the library, then the path, dock, robot, room names and zone drawn
  * here. One finger pans, two zoom; a tap reports the cell tapped. The zone moves when dragged
- * and resizes from its corner handle.
+ * and resizes from its corner handle. With a [draw] mode other than [DrawMode.Pan], one finger
+ * draws instead and [onDraw] follows it; two fingers still pan and zoom.
  */
 @Composable
 fun MapCanvas(
@@ -116,6 +130,8 @@ fun MapCanvas(
     modifier: Modifier = Modifier,
     onTap: (Offset) -> Unit = {},
     onZone: (CellRect, done: Boolean) -> Unit = { _, _ -> },
+    draw: DrawMode = DrawMode.Pan,
+    onDraw: (Drawn?) -> Unit = {},
     content: @Composable BoxScope.() -> Unit = {},
 ) {
     var image by remember { mutableStateOf<ImageBitmap?>(null) }
@@ -135,6 +151,8 @@ fun MapCanvas(
     val ov by rememberUpdatedState(overlay)
     val tap by rememberUpdatedState(onTap)
     val zoneChanged by rememberUpdatedState(onZone)
+    val drawMode by rememberUpdatedState(draw)
+    val drawn by rememberUpdatedState(onDraw)
     val measurer = rememberTextMeasurer()
     val labelStyle = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium)
     val background = Color(0xFFE9EDF2)
@@ -169,6 +187,40 @@ fun MapCanvas(
                             zoneChanged(z, false)
                         }
                         zoneChanged(z, true)
+                    } else if (drawMode != DrawMode.Pan) {
+                        // One finger draws; a second finger turns it into pan and zoom.
+                        val start = viewport.toCell(down.position)
+                        var drawing = false
+                        var panning = false
+                        var last = start
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.changes.none { it.pressed }) break
+                            if (!panning && event.changes.count { it.pressed } > 1) {
+                                panning = true
+                                if (drawing) drawn(null)
+                                drawing = false
+                            }
+                            if (panning) {
+                                val zoom = event.calculateZoom()
+                                if (zoom != 1f) viewport.zoomAt(event.calculateCentroid(), zoom)
+                                viewport.offset += event.calculatePan()
+                                event.changes.forEach { it.consume() }
+                                continue
+                            }
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: continue
+                            moved += change.positionChange().getDistance()
+                            if (moved > slop) drawing = true
+                            if (drawing) {
+                                last = viewport.toCell(change.position)
+                                drawn(Drawn(start, last, false))
+                                change.consume()
+                            }
+                        }
+                        when {
+                            drawing -> drawn(Drawn(start, last, true))
+                            !panning -> tap(start)
+                        }
                     } else {
                         var pointers = 1
                         while (true) {
@@ -214,9 +266,21 @@ fun MapCanvas(
                     drawCircle(Accent, 11f * density.density, b, style = Stroke(3f * density.density))
                 }
             }
+            for (m in ov.marks) {
+                val a = viewport.toScreen(m.a.x.toDouble(), m.a.y.toDouble())
+                val b = viewport.toScreen(m.b.x.toDouble(), m.b.y.toDouble())
+                if (m.line) {
+                    drawLine(m.color, a, b, 4f * density.density, StrokeCap.Round)
+                } else {
+                    val tl = Offset(min(a.x, b.x), min(a.y, b.y))
+                    val size = Size(abs(b.x - a.x), abs(b.y - a.y))
+                    drawRect(m.color.copy(alpha = 0.22f), tl, size)
+                    drawRect(m.color, tl, size, style = Stroke(2.5f * density.density))
+                }
+            }
             // Room names, with the cleaning order of picked rooms.
             for (room in state.rooms) {
-                if (room.hidden) continue
+                if (room.hidden && !ov.hiddenLabels) continue
                 val p = room.label ?: continue
                 val order = ov.picked.indexOf(room.id)
                 val name = ov.names[room.id] ?: room.name
@@ -228,8 +292,18 @@ fun MapCanvas(
                 val h = layout.size.height + 2 * pad.y
                 val topLeft = Offset(c.x - w / 2, c.y - h / 2)
                 val picked = order >= 0
-                drawRoundRect(if (picked) Accent else Color.White.copy(alpha = 0.9f), topLeft, Size(w, h), CornerRadius(h / 2))
-                drawText(layout, color = if (picked) Color.White else Color(0xFF1E1E1E), topLeft = topLeft + pad)
+                val fill = when {
+                    picked -> Accent
+                    room.hidden -> Color(0xFFD5D9DE).copy(alpha = 0.9f)
+                    else -> Color.White.copy(alpha = 0.9f)
+                }
+                val ink = when {
+                    picked -> Color.White
+                    room.hidden -> Color(0xFF6B7280)
+                    else -> Color(0xFF1E1E1E)
+                }
+                drawRoundRect(fill, topLeft, Size(w, h), CornerRadius(h / 2))
+                drawText(layout, color = ink, topLeft = topLeft + pad)
             }
             state.dock?.let { d ->
                 val c = viewport.toScreen(d.x, d.y)
