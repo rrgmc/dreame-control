@@ -1,21 +1,24 @@
 //! The map editing screen. The user picks a tool, works on the map, sees the change outlined,
 //! and saves it to the robot. One change is saved at a time, as in the official app.
 //!
-//! Standard tools: rename, divide and merge rooms; add no-go zones, no-mop zones and virtual
-//! walls; delete one by clicking it. With advanced editing on (Settings), three tools work
-//! through a backup and restore of the map: "Move a border" redraws the border between two
-//! rooms, "Delete a room" takes a room and its floor off the map, and "Erase floor" takes the
-//! floor in a rectangle off the map. Both are for floor that does not exist; merging joins a
-//! real room to its neighbour. Hidden rooms can be deleted too. The same setting adds "Map
-//! backup": back up the map to a file, and restore it from one.
+//! Standard tools: rename, divide and merge rooms; add no-go zones, no-mop zones, virtual
+//! walls, carpets, "not a carpet" areas, thresholds and curtains; delete one by clicking it.
+//! With advanced editing on (Settings), five tools work through a backup and restore of the
+//! map: "Move a border" redraws the border between two rooms along a straight or bent line,
+//! "Paint into a room" gives a room the floor of other rooms, "New room from a room" paints a
+//! new room out of a room, "Delete a room" takes a room and its floor off the map, and "Erase
+//! floor" takes the floor in a rectangle off the map. The last two are for floor that does not
+//! exist; merging joins a real room to its neighbour. Hidden rooms can be deleted too. The same
+//! setting adds "Map backup": back up the map to a file, and restore it from one.
 
 use crate::backend::{Backend, LoadedMap, Msg, SharedRobot};
-use crate::mapview::{Drag, Mark, MapInput, MapView, Overlay};
+use crate::mapview::{CellMark, Drag, Mark, MapInput, MapView, Overlay};
 use dreame::archiveedit::GridEdit;
 use dreame::mapedit::{self, Edit};
 use dreame::shapes::{self, Selection, Shape, ZoneKind};
 use dreame_i18n::{tr, trf, trn};
-use dreame_map::model::Line;
+use dreame_map::model::{Line, Point};
+use dreame_map::segmap::BorderCells;
 use dreame_map::path::Path;
 use dreame_map::Map;
 use eframe::egui::{self, Color32, RichText};
@@ -35,6 +38,10 @@ enum Tool {
     Draw(ZoneKind),
     /// Advanced: redraw the border of two neighbour rooms.
     Border,
+    /// Advanced: give a room the floor of other rooms.
+    Paint,
+    /// Advanced: paint a new room out of a room.
+    NewRoom,
     /// Advanced: delete a room, giving its floor to a neighbour.
     Remove,
     /// Advanced: make the floor in a dragged rectangle outside the map.
@@ -49,10 +56,28 @@ impl Tool {
             Tool::Merge => tr("Click two rooms that touch each other."),
             Tool::Draw(ZoneKind::NoGo) => tr("Drag a rectangle. The robot will not enter it."),
             Tool::Draw(ZoneKind::NoMop) => tr("Drag a rectangle. The robot will vacuum but not mop there."),
+            Tool::Draw(ZoneKind::Carpet) => tr("Drag a rectangle over a carpet the robot did not find."),
+            Tool::Draw(ZoneKind::RoundCarpet) => tr("Drag a rectangle around a round carpet the robot did not find."),
+            Tool::Draw(ZoneKind::IgnoredCarpet) => {
+                tr("Drag a rectangle over something the robot takes for a carpet, such as a dark rug or mat. It will treat it as floor.")
+            }
+            Tool::Draw(ZoneKind::Threshold) => tr("Drag a line along a door sill. The robot will cross it with care."),
+            Tool::Draw(ZoneKind::ImpassableThreshold) => tr("Drag a line along a door sill the robot cannot climb. It will not try."),
+            Tool::Draw(ZoneKind::Curtain) => tr("Drag a line along a curtain. The robot will pass under it with care."),
             Tool::Draw(_) => tr("Drag a line. The robot will not cross it."),
             Tool::Border => tr(
-                "Click two rooms that touch, then drag the new border across both. Room names and \
-                 settings stay. Saving takes a few minutes.",
+                "Click two rooms that touch. Then drag the new border across both, or click its \
+                 points and double-click the last one for a bent border. Room names and settings \
+                 stay. Saving takes a few minutes.",
+            ),
+            Tool::Paint => tr(
+                "Click the room that gets the floor, then paint over the floor of other rooms. \
+                 Room names and settings stay. Saving takes a few minutes.",
+            ),
+            Tool::NewRoom => tr(
+                "Click the room to take the new room from, then paint the new room's floor. It \
+                 gets that room's type, floor and cleaning settings. Saving takes a few minutes. \
+                 This is new: the robot may join the rooms again when it next maps.",
             ),
             Tool::Remove => tr(
                 "Click a room, hidden or not, whose floor does not exist. The room and its floor \
@@ -71,20 +96,26 @@ impl Tool {
     fn drag(self) -> Drag {
         match self {
             Tool::Draw(k) if k.is_line() => Drag::Line,
-            Tool::Draw(_) | Tool::Erase => Drag::Rect,
+            Tool::Draw(_) | Tool::Erase | Tool::Paint | Tool::NewRoom => Drag::Rect,
             Tool::Divide | Tool::Border => Drag::Line,
             Tool::Select | Tool::Merge | Tool::Remove => Drag::Pan,
         }
+    }
+
+    fn paints(self) -> bool {
+        matches!(self, Tool::Paint | Tool::NewRoom)
     }
 }
 
 /// A change ready to save.
 enum Staged {
     Map(Edit),
-    /// An archive edit; `line` is drawn on the map when the edit has one.
-    Grid { edit: GridEdit, line: Option<Line> },
+    /// A border move: rooms `a` and `b`, the line, straight or bent, and the cells it moves.
+    Border { a: u32, b: u32, line: Vec<Point>, cells: BorderCells },
     /// An erase, an archive edit too.
     Erase(shapes::Erase),
+    /// A paint, an archive edit too.
+    Paint(shapes::Paint),
 }
 
 pub enum EditExit {
@@ -116,10 +147,23 @@ pub struct EditMap {
     progress: Vec<String>,
     /// The last save's outcome, shown until the next change.
     outcome: Option<(String, bool)>,
+    /// The points of a bent border clicked so far.
+    border_points: Vec<Point>,
+    /// The paint tools draw rectangles instead of brushing.
+    paint_rect: bool,
+    /// The brush's reach around the cell under the pointer, in cells.
+    brush: usize,
+    /// The paint tools take cells back out of the paint instead of adding them.
+    eraser: bool,
+    /// The name typed for a new room.
+    new_room_name: String,
+    /// The robot's path from the last job, shown when `show_path` is on.
+    path: Path,
+    show_path: bool,
 }
 
 impl EditMap {
-    pub fn new(robot: SharedRobot, map: Map, advanced: bool) -> Self {
+    pub fn new(robot: SharedRobot, map: Map, path: Path, advanced: bool) -> Self {
         let mut view = MapView::default();
         view.set_map(&map);
         Self {
@@ -139,6 +183,13 @@ impl EditMap {
             saving: false,
             progress: Vec::new(),
             outcome: None,
+            border_points: Vec::new(),
+            paint_rect: false,
+            brush: 1,
+            eraser: false,
+            new_room_name: String::new(),
+            path,
+            show_path: false,
         }
     }
 
@@ -187,6 +238,8 @@ impl EditMap {
         self.selected = None;
         self.room = None;
         self.problem = None;
+        self.border_points.clear();
+        self.new_room_name.clear();
     }
 
     fn reset(&mut self) {
@@ -195,10 +248,54 @@ impl EditMap {
         self.staged = None;
         self.problem = None;
         self.outcome = None;
+        self.border_points.clear();
+        self.new_room_name.clear();
+    }
+
+    /// What a primary-button drag on the map does now.
+    fn drag(&self) -> Drag {
+        match self.tool {
+            t if t.paints() && self.room.is_some() && !self.paint_rect => Drag::Brush(self.brush),
+            // Once the points of a bent border are being clicked, a drag pans.
+            Tool::Border if !self.border_points.is_empty() => Drag::Pan,
+            t => t.drag(),
+        }
+    }
+
+    /// Esc undoes one step: the drag in progress, then the change drawn, then the rooms or
+    /// zone picked, then the tool, back to Select.
+    fn escape(&mut self) {
+        if self.view.cancel_drag() {
+            return;
+        }
+        if !self.border_points.is_empty() {
+            self.border_points.clear();
+            self.problem = None;
+        } else if self.staged.is_some() || self.problem.is_some() {
+            self.staged = None;
+            self.problem = None;
+            self.outcome = None;
+            // The room picked for a deletion is only the deletion itself.
+            if self.tool == Tool::Remove {
+                self.room = None;
+            }
+        } else if self.room.is_some() || self.selected.is_some() {
+            self.reset();
+        } else if self.tool != Tool::Select {
+            self.tool = Tool::Select;
+            self.reset();
+        } else {
+            self.outcome = None;
+        }
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui, backend: &Backend, can_edit: bool) -> EditExit {
         let mut exit = EditExit::Stay;
+        // An open dialog takes Esc itself and closes.
+        let dialog = self.unhide.is_some() || self.restore.is_some() || self.rename.is_some();
+        if !self.saving && !dialog && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+            self.escape();
+        }
         egui::Panel::top("edit-top").show(ui, |ui| {
             ui.add_space(4.0);
             ui.horizontal(|ui| {
@@ -212,11 +309,13 @@ impl EditMap {
         });
 
         egui::Panel::left("tools").resizable(false).exact_size(230.0).show(ui, |ui| {
-            ui.add_enabled_ui(!self.saving && can_edit, |ui| self.toolbox(ui, backend));
-            if !can_edit {
-                ui.add_space(8.0);
-                ui.colored_label(ui.visuals().warn_fg_color, tr("The map can be edited while the robot is not cleaning."));
-            }
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.add_enabled_ui(!self.saving && can_edit, |ui| self.toolbox(ui, backend));
+                if !can_edit {
+                    ui.add_space(8.0);
+                    ui.colored_label(ui.visuals().warn_fg_color, tr("The map can be edited while the robot is not cleaning."));
+                }
+            });
         });
 
         egui::Panel::bottom("edit-bottom").show(ui, |ui| {
@@ -229,7 +328,9 @@ impl EditMap {
             let coloured: Vec<u32> = match (self.tool, self.room, &self.staged) {
                 (_, _, Some(Staged::Map(Edit::MergeRooms(a, b)))) => vec![*a, *b],
                 (_, _, Some(Staged::Erase(e))) => e.cells.keys().copied().collect(),
-                (Tool::Border, Some(a), Some(Staged::Grid { edit: GridEdit::Border { b, .. }, .. })) => vec![a, u32::from(*b)],
+                (_, _, Some(Staged::Paint(p))) => std::iter::once(p.room).chain(p.sources(&self.map).into_keys()).collect(),
+                (Tool::Paint | Tool::NewRoom, Some(r), _) => vec![r],
+                (_, _, Some(Staged::Border { a, b, .. })) => vec![*a, *b],
                 (Tool::Border, Some(a), _) => match self.selected {
                     Some(Selection::Room(b)) => vec![a, b],
                     _ => vec![a],
@@ -241,13 +342,23 @@ impl EditMap {
                 },
             };
             let marks = self.marks();
+            let cells = match &self.staged {
+                Some(Staged::Paint(p)) => vec![CellMark { cells: p.cells.iter().copied().collect(), room: p.parent.unwrap_or(p.room) }],
+                Some(Staged::Border { a, b, cells, .. }) => vec![
+                    CellMark { cells: cells.to_a.clone(), room: *a },
+                    CellMark { cells: cells.to_b.clone(), room: *b },
+                ],
+                _ => Vec::new(),
+            };
+            let no_path = Path::default();
             let overlay = Overlay {
-                path: &Path::default(),
+                path: if self.show_path { &self.path } else { &no_path },
                 pose: None,
                 picked: &[],
                 zone: None,
-                drag: if self.saving || !can_edit { Drag::Pan } else { self.tool.drag() },
+                drag: if self.saving || !can_edit { Drag::Pan } else { self.drag() },
                 marks,
+                cells,
                 hidden_labels: true,
             };
             let input = self.view.show(ui, &self.map, &coloured, &overlay);
@@ -367,10 +478,24 @@ impl EditMap {
         button(ui, Tool::Draw(ZoneKind::NoGo), &zone_name(ZoneKind::NoGo));
         button(ui, Tool::Draw(ZoneKind::NoMop), &zone_name(ZoneKind::NoMop));
         button(ui, Tool::Draw(ZoneKind::Wall), &zone_name(ZoneKind::Wall));
+        ui.add_space(10.0);
+        ui.label(RichText::new(tr("Floor")).strong());
+        for kind in [
+            ZoneKind::Carpet,
+            ZoneKind::RoundCarpet,
+            ZoneKind::IgnoredCarpet,
+            ZoneKind::Threshold,
+            ZoneKind::ImpassableThreshold,
+            ZoneKind::Curtain,
+        ] {
+            button(ui, Tool::Draw(kind), &zone_name(kind));
+        }
         if self.advanced {
             ui.add_space(10.0);
             ui.label(RichText::new(tr("Advanced")).strong());
             button(ui, Tool::Border, tr("Move a border"));
+            button(ui, Tool::Paint, tr("Paint into a room"));
+            button(ui, Tool::NewRoom, tr("New room from a room"));
             button(ui, Tool::Remove, tr("Delete a room"));
             button(ui, Tool::Erase, tr("Erase floor"));
         }
@@ -403,6 +528,22 @@ impl EditMap {
         }
         ui.add_space(14.0);
         ui.label(RichText::new(self.tool.hint()).weak());
+        if self.tool.paints() {
+            self.paint_options(ui);
+        }
+        if self.tool == Tool::Border && !self.border_points.is_empty() {
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.label(trn("{n} point", "{n} points", self.border_points.len() as i64, &[]));
+                if ui.add_enabled(self.border_points.len() >= 2, egui::Button::new(tr("Finish the line"))).clicked() {
+                    self.finish_border();
+                }
+            });
+        }
+        if !self.path.points.is_empty() {
+            ui.add_space(10.0);
+            ui.checkbox(&mut self.show_path, tr("Show the robot's last path"));
+        }
 
         // What the selection offers.
         ui.add_space(14.0);
@@ -420,6 +561,16 @@ impl EditMap {
                 }
                 if ui.button(tr("Merge with a neighbour")).clicked() {
                     self.tool = Tool::Merge;
+                    self.reset();
+                    self.room = Some(id);
+                }
+                if self.advanced && ui.button(tr("Paint into this room")).clicked() {
+                    self.tool = Tool::Paint;
+                    self.reset();
+                    self.room = Some(id);
+                }
+                if self.advanced && ui.button(tr("Make a new room from it")).clicked() {
+                    self.tool = Tool::NewRoom;
                     self.reset();
                     self.room = Some(id);
                 }
@@ -444,11 +595,9 @@ impl EditMap {
                 self.staged = None;
                 self.problem = None;
                 self.outcome = None;
-                // Only the kinds this app edits can be picked.
+                // Zones and lines can be picked; furniture cannot.
                 self.selected = match shapes::hit(&self.map, p, tolerance) {
-                    Some(Selection::Zone(k, i)) if matches!(k, ZoneKind::NoGo | ZoneKind::NoMop | ZoneKind::Wall) => {
-                        Some(Selection::Zone(k, i))
-                    }
+                    Some(Selection::Zone(k, i)) => Some(Selection::Zone(k, i)),
                     _ => match self.map.room_at(p) {
                         Some(r) if !self.visible(r) => {
                             self.unhide = Some(r);
@@ -471,7 +620,15 @@ impl EditMap {
                 }
                 None => self.problem = Some(tr("Drag the line across a room.").into()),
             },
-            (Tool::Merge | Tool::Border, MapInput::Click(p)) => {
+            (Tool::Border, MapInput::Click(p)) if self.room.is_some() && matches!(self.selected, Some(Selection::Room(_))) => {
+                // Both rooms are picked: clicks are the points of a bent border.
+                self.add_border_point(p);
+            }
+            (Tool::Border, MapInput::DoubleClick(p)) if self.room.is_some() && matches!(self.selected, Some(Selection::Room(_))) => {
+                self.add_border_point(p);
+                self.finish_border();
+            }
+            (Tool::Merge | Tool::Border, MapInput::Click(p) | MapInput::DoubleClick(p)) => {
                 // Hidden rooms may be merged too, such as a grey area beside a room.
                 let Some(r) = self.map.room_at(p) else { return };
                 match self.room {
@@ -499,33 +656,26 @@ impl EditMap {
                 }
             }
             (Tool::Border, MapInput::Line(a, b)) => {
-                let (Some(ra), Some(Selection::Room(rb))) = (self.room, self.selected) else {
-                    self.problem = Some(tr("Click the two rooms first.").into());
-                    return;
-                };
-                let line = Line::new(
-                    dreame_map::view::snap(a.x, SNAP_MM),
-                    dreame_map::view::snap(a.y, SNAP_MM),
-                    dreame_map::view::snap(b.x, SNAP_MM),
-                    dreame_map::view::snap(b.y, SNAP_MM),
-                );
-                match dreame_map::edit::border_cells(&self.map, ra, rb, &[line.a, line.b]) {
-                    Ok(_) => match (u8::try_from(ra), u8::try_from(rb)) {
-                        (Ok(a8), Ok(b8)) => self.stage(Staged::Grid {
-                            edit: GridEdit::Border { a: a8, b: b8, line: vec![(line.a.x, line.a.y), (line.b.x, line.b.y)] },
-                            line: Some(line),
-                        }),
-                        _ => self.problem = Some(tr("These rooms cannot be changed this way.").into()),
-                    },
-                    Err(e) => {
-                        self.problem = Some(trf("Drag the line across both rooms, from one outer wall to another. ({error})", &[("error", &e)]));
-                    }
+                self.border_points = vec![a, b];
+                self.finish_border();
+            }
+            (t, MapInput::Click(p)) if t.paints() && self.room.is_none() => {
+                // Hidden rooms too, as for a merge.
+                if let Some(r) = self.map.room_at(p) {
+                    self.room = Some(r);
+                    self.staged = None;
+                    self.problem = None;
+                    self.outcome = None;
                 }
             }
-            (Tool::Remove, MapInput::Click(p)) => {
-                // Hidden rooms too: they are often the floor that does not exist.
-                if let Some(r) = self.map.room_at(p) {
-                    self.start_remove(r);
+            (t, MapInput::Brush(p)) if t.paints() => {
+                let cells = shapes::brush_cells(&self.map, p, self.brush);
+                self.paint(cells);
+            }
+            (t, MapInput::Rect(a, b)) if t.paints() => {
+                if let Some(rect) = shapes::drawn_rect(a, b, SNAP_MM) {
+                    let cells = shapes::rect_cells(&self.map, &rect);
+                    self.paint(cells);
                 }
             }
             (Tool::Erase, MapInput::Rect(a, b)) => match shapes::erase_edit(&self.map, a, b, SNAP_MM) {
@@ -545,7 +695,14 @@ impl EditMap {
         self.outcome = None;
         self.problem = match &s {
             Staged::Map(e) => mapedit::steps(&self.map, e).err().map(|e| friendly_problem(e, &s)),
-            Staged::Grid { .. } | Staged::Erase(_) => None,
+            Staged::Paint(p) => {
+                let emptied = p.emptied(&self.map);
+                (!emptied.is_empty()).then(|| {
+                    let rooms = emptied.iter().map(|r| self.room_name(*r)).collect::<Vec<_>>().join(", ");
+                    trf("This takes all of {rooms}. To join two rooms, merge them instead.", &[("rooms", &rooms)])
+                })
+            }
+            Staged::Border { .. } | Staged::Erase(_) => None,
         };
         self.staged = Some(s);
     }
@@ -556,8 +713,24 @@ impl EditMap {
         self.outcome = None;
         match s {
             Staged::Map(e) => backend.apply_edit(&self.robot, self.map.clone(), e),
-            Staged::Grid { edit, .. } => backend.apply_grid(&self.robot, self.map.clone(), edit),
+            Staged::Border { a, b, line, .. } => match (u8::try_from(a), u8::try_from(b)) {
+                (Ok(a), Ok(b)) => {
+                    let line = line.iter().map(|p| (p.x, p.y)).collect();
+                    backend.apply_grid(&self.robot, self.map.clone(), GridEdit::Border { a, b, line });
+                }
+                _ => {
+                    self.saving = false;
+                    self.outcome = Some((tr("These rooms cannot be changed this way.").into(), true));
+                }
+            },
             Staged::Erase(e) => backend.apply_grid(&self.robot, self.map.clone(), e.edit),
+            Staged::Paint(p) => match p.edit(&self.map, Some(&self.new_room_name)) {
+                Some(edit) => backend.apply_grid(&self.robot, self.map.clone(), edit),
+                None => {
+                    self.saving = false;
+                    self.outcome = Some((tr("These rooms cannot be changed this way.").into(), true));
+                }
+            },
         }
     }
 
@@ -604,7 +777,7 @@ impl EditMap {
         if let Some(p) = &self.problem {
             ui.colored_label(ui.visuals().error_fg_color, p);
         }
-        if matches!(self.staged, Some(Staged::Grid { .. } | Staged::Erase(_))) {
+        if matches!(self.staged, Some(Staged::Border { .. } | Staged::Erase(_) | Staged::Paint(_))) {
             ui.label(
                 RichText::new(tr(
                     "This saves through a backup and restore of the robot's map and takes a few minutes. \
@@ -618,13 +791,23 @@ impl EditMap {
     }
 
     fn marks(&self) -> Vec<Mark> {
-        let mut marks = Vec::new();
+        // The map image does not show "not a carpet" areas, so outline them here.
+        let mut marks: Vec<Mark> =
+            self.map.ignored_carpet.iter().map(|r| Mark { shape: Shape::Rect(*r), colour: Color32::from_gray(150) }).collect();
         if let Some(Selection::Zone(kind, i)) = self.selected {
             if let Some(shape) = kind.shapes(&self.map).get(i) {
                 marks.push(Mark { shape: *shape, colour: Color32::from_rgb(230, 120, 30) });
             }
         }
         match &self.staged {
+            Some(Staged::Map(Edit::SplitRoom { line, .. })) if self.problem.is_none() => {
+                // A grey line for what was drawn, the accent for the part that is sent: trimmed
+                // to the room's edge.
+                marks.push(Mark { shape: Shape::Line(*line), colour: Color32::from_gray(150) });
+                if let Some(sent) = self.sent_split_line() {
+                    marks.push(Mark { shape: Shape::Line(sent), colour: crate::ACCENT });
+                }
+            }
             Some(Staged::Map(e)) => {
                 let shape = shapes::added_shape(e).or(match e {
                     Edit::SplitRoom { line, .. } => Some(Shape::Line(*line)),
@@ -635,14 +818,19 @@ impl EditMap {
                     marks.push(Mark { shape, colour });
                 }
             }
-            Some(Staged::Grid { line: Some(line), .. }) => marks.push(Mark { shape: Shape::Line(*line), colour: crate::ACCENT }),
+            Some(Staged::Border { line, .. }) => marks.extend(segments(line)),
             Some(Staged::Erase(e)) => {
                 if let Some(rect) = e.rect {
                     marks.push(Mark { shape: Shape::Rect(rect), colour: Color32::from_rgb(210, 50, 50) });
                 }
             }
-            Some(Staged::Grid { line: None, .. }) | None => {}
+            Some(Staged::Paint(_)) => {}
+            None => {}
         }
+        // The points of a bent border clicked so far.
+        let dot = |p: &Point| Mark { shape: Shape::Ellipse { center: *p, size: (80.0, 80.0) }, colour: crate::ACCENT };
+        marks.extend(self.border_points.iter().map(dot));
+        marks.extend(segments(&self.border_points));
         marks
     }
 
@@ -659,14 +847,28 @@ impl EditMap {
                 Edit::MergeRooms(a, b) => trf("Merge {room} and {other}", &[("room", &self.room_name(*a)), ("other", &self.room_name(*b))]),
                 Edit::RenameRoom { id, name } => trf("Rename {room} to {name}", &[("room", &self.room_name(*id)), ("name", name)]),
                 Edit::HideRooms(_) => tr("Show the hidden area again").into(),
+                Edit::AddCarpet(_) => tr("New carpet").into(),
+                Edit::AddRoundCarpet(_) => tr("New round carpet").into(),
+                Edit::AddIgnoredCarpet(_) => tr("New \"not a carpet\" area").into(),
+                Edit::AddThreshold(_) => tr("New threshold").into(),
+                Edit::AddImpassableThreshold(_) => tr("New threshold the robot does not cross").into(),
+                Edit::AddCurtain(_) => tr("New curtain").into(),
+                Edit::RemoveCarpet(_) => tr("Delete the carpet").into(),
+                Edit::RemoveIgnoredCarpet(_) => tr("Delete the \"not a carpet\" area").into(),
+                Edit::RemoveThreshold(_) => tr("Delete the threshold").into(),
+                Edit::RemoveImpassableThreshold(_) => tr("Delete the threshold the robot does not cross").into(),
+                Edit::RemoveCurtain(_) => tr("Delete the curtain").into(),
+                Edit::RemoveRamp(_) => tr("Delete the ramp").into(),
                 other => format!("{other:?}"),
             },
-            Staged::Grid { edit: GridEdit::Border { a, b, .. }, .. } => {
-                trf(
-                    "New border between {room} and {other}",
-                    &[("room", &self.room_name(u32::from(*a))), ("other", &self.room_name(u32::from(*b)))],
-                )
-            }
+            Staged::Border { a, b, cells, .. } => trf(
+                "New border between {room} and {other}: {moved}",
+                &[
+                    ("room", &self.room_name(*a)),
+                    ("other", &self.room_name(*b)),
+                    ("moved", &trn("{n} cell changes room", "{n} cells change room", (cells.to_a.len() + cells.to_b.len()) as i64, &[])),
+                ],
+            ),
             Staged::Erase(e) if e.rect.is_none() => {
                 let rooms = e.emptied.iter().map(|r| self.room_name(*r)).collect::<Vec<_>>().join(", ");
                 trf("Delete {room} and its floor", &[("room", &rooms)])
@@ -681,8 +883,110 @@ impl EditMap {
                     trf("{erase}; {rooms} will be deleted", &[("erase", &erase), ("rooms", &rooms)])
                 }
             }
-            Staged::Grid { .. } => tr("Room change").into(),
+            Staged::Paint(p) if p.parent.is_some() => trn(
+                "New room from {n} floor cell of {room}",
+                "New room from {n} floor cells of {room}",
+                p.cells.len() as i64,
+                &[("room", &self.room_name(p.parent.unwrap_or_default()))],
+            ),
+            Staged::Paint(p) => {
+                let from = p.sources(&self.map).keys().map(|r| self.room_name(*r)).collect::<Vec<_>>().join(", ");
+                trn(
+                    "Give {n} floor cell of {from} to {room}",
+                    "Give {n} floor cells of {from} to {room}",
+                    p.cells.len() as i64,
+                    &[("from", &from), ("room", &self.room_name(p.room))],
+                )
+            }
         }
+    }
+
+    /// Adds a clicked point to the bent border, snapped; a point on the last one is skipped.
+    fn add_border_point(&mut self, p: Point) {
+        let p = Point::new(dreame_map::view::snap(p.x, SNAP_MM), dreame_map::view::snap(p.y, SNAP_MM));
+        if self.border_points.last() != Some(&p) {
+            self.border_points.push(p);
+        }
+        self.staged = None;
+        self.problem = None;
+        self.outcome = None;
+    }
+
+    /// Stages the border along the points given so far, or says why it cannot be.
+    fn finish_border(&mut self) {
+        let line: Vec<Point> = std::mem::take(&mut self.border_points)
+            .into_iter()
+            .map(|p| Point::new(dreame_map::view::snap(p.x, SNAP_MM), dreame_map::view::snap(p.y, SNAP_MM)))
+            .collect();
+        let (Some(a), Some(Selection::Room(b))) = (self.room, self.selected) else {
+            self.problem = Some(tr("Click the two rooms first.").into());
+            return;
+        };
+        if line.len() < 2 {
+            return;
+        }
+        match dreame_map::edit::border_cells(&self.map, a, b, &line) {
+            Ok(cells) => self.stage(Staged::Border { a, b, line, cells }),
+            Err(e) => {
+                self.problem = Some(trf("Drag the line across both rooms, from one outer wall to another. ({error})", &[("error", &e)]));
+            }
+        }
+    }
+
+    /// Adds `cells` to the staged paint, or with the eraser on takes them out of it.
+    fn paint(&mut self, cells: Vec<(usize, usize)>) {
+        let Some(room) = self.room else { return };
+        let mut paint = match self.staged.take() {
+            Some(Staged::Paint(p)) => p,
+            _ if self.tool == Tool::NewRoom => match shapes::Paint::new_room(&self.map, room) {
+                Some(p) => p,
+                None => {
+                    self.problem = Some(tr("The map has no room id left for a new room.").into());
+                    return;
+                }
+            },
+            _ => shapes::Paint::into_room(room),
+        };
+        if self.eraser {
+            paint.remove(cells);
+        } else {
+            paint.add(&self.map, cells);
+        }
+        if paint.cells.is_empty() {
+            self.staged = None;
+            self.problem = None;
+        } else {
+            self.stage(Staged::Paint(paint));
+        }
+    }
+
+    /// The brush or rectangle, the brush size, the eraser, and for a new room its name.
+    fn paint_options(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut self.paint_rect, false, tr("Brush"));
+            ui.selectable_value(&mut self.paint_rect, true, tr("Rectangle"));
+        });
+        if !self.paint_rect {
+            ui.horizontal(|ui| {
+                ui.label(tr("Size"));
+                ui.add(egui::Slider::new(&mut self.brush, 0..=6).show_value(false));
+            });
+        }
+        ui.checkbox(&mut self.eraser, tr("Eraser: take cells back out"));
+        if self.tool == Tool::NewRoom && self.room.is_some() {
+            ui.add_space(4.0);
+            ui.add(egui::TextEdit::singleline(&mut self.new_room_name).desired_width(200.0).hint_text(tr("New room's name")));
+        }
+    }
+
+    /// The divide line as it is sent, trimmed to the room's edge, when the staged divide is valid.
+    fn sent_split_line(&self) -> Option<Line> {
+        let Some(Staged::Map(e @ Edit::SplitRoom { .. })) = &self.staged else { return None };
+        let steps = mapedit::steps(&self.map, e).ok()?;
+        let q = steps.iter().find_map(|(_, c)| c.value()["dsrid"].as_array().cloned())?;
+        let v: Vec<f64> = q.iter().filter_map(serde_json::Value::as_f64).collect();
+        (v.len() >= 4).then(|| Line::new(v[0], v[1], v[2], v[3]))
     }
 
     /// Switches to "Delete a room" and stages the deletion of `id`, hidden or not: its floor
@@ -706,6 +1010,11 @@ impl EditMap {
     }
 }
 
+/// The segments of a line through `points`, as marks in the accent colour.
+fn segments(points: &[Point]) -> impl Iterator<Item = Mark> + '_ {
+    points.windows(2).map(|w| Mark { shape: Shape::Line(Line::new(w[0].x, w[0].y, w[1].x, w[1].y)), colour: crate::ACCENT })
+}
+
 /// A file dialog for map backups, which are bzip2 tar archives.
 fn backup_dialog() -> rfd::FileDialog {
     rfd::FileDialog::new().set_title(tr("Map backup")).add_filter(tr("Map backup"), &["tbz2"])
@@ -717,7 +1026,13 @@ fn zone_name(kind: ZoneKind) -> String {
         ZoneKind::NoGo => tr("No-go zone").into(),
         ZoneKind::NoMop => tr("No-mop zone").into(),
         ZoneKind::Wall => tr("Virtual wall").into(),
-        other => crate::phase::capitalise(tr(other.label())),
+        ZoneKind::Carpet => tr("Carpet").into(),
+        ZoneKind::RoundCarpet => tr("Round carpet").into(),
+        ZoneKind::IgnoredCarpet => tr("Not a carpet").into(),
+        ZoneKind::Threshold => tr("Threshold").into(),
+        ZoneKind::ImpassableThreshold => tr("Threshold, do not cross").into(),
+        ZoneKind::Curtain => tr("Curtain").into(),
+        ZoneKind::Ramp => tr("Ramp").into(),
     }
 }
 
@@ -727,7 +1042,11 @@ fn delete_label(kind: ZoneKind) -> String {
         ZoneKind::NoGo => tr("Delete this no-go zone").into(),
         ZoneKind::NoMop => tr("Delete this no-mop zone").into(),
         ZoneKind::Wall => tr("Delete this virtual wall").into(),
-        other => trf("Delete this {kind}", &[("kind", &tr(other.label()))]),
+        ZoneKind::Carpet | ZoneKind::RoundCarpet => tr("Delete this carpet").into(),
+        ZoneKind::IgnoredCarpet => tr("Delete this \"not a carpet\" area").into(),
+        ZoneKind::Threshold | ZoneKind::ImpassableThreshold => tr("Delete this threshold").into(),
+        ZoneKind::Curtain => tr("Delete this curtain").into(),
+        ZoneKind::Ramp => tr("Delete this ramp").into(),
     }
 }
 

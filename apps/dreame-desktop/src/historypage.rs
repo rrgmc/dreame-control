@@ -117,6 +117,7 @@ impl HistoryPage {
                     zone: None,
                     drag: Drag::Pan,
                     marks: Vec::new(),
+                    cells: Vec::new(),
                     hidden_labels: false,
                 };
                 self.view.show(ui, map, &map.active_rooms, &overlay);

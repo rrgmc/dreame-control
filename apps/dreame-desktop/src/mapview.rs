@@ -25,6 +25,8 @@ pub enum Drag {
     Rect,
     /// Draws a line; right-drag pans.
     Line,
+    /// Paints with a square brush of this many cells around the pointer; right-drag pans.
+    Brush(usize),
 }
 
 /// What a click or drag on the map asks for, in world mm.
@@ -36,6 +38,17 @@ pub enum MapInput {
     Rect(Point, Point),
     /// A line dragged, from start to end.
     Line(Point, Point),
+    /// A double-click; the first click of it came as [`MapInput::Click`].
+    DoubleClick(Point),
+    /// The brush is down at this point, in a click or a drag.
+    Brush(Point),
+}
+
+/// Grid cells to tint in a room's colour, such as cells a staged edit moves to that room.
+#[derive(Debug, Clone)]
+pub struct CellMark {
+    pub cells: Vec<(usize, usize)>,
+    pub room: u32,
 }
 
 /// A shape to outline on the map, such as a staged edit or a selection.
@@ -54,6 +67,7 @@ pub struct Overlay<'a> {
     pub zone: Option<Rect>,
     pub drag: Drag,
     pub marks: Vec<Mark>,
+    pub cells: Vec<CellMark>,
     /// Name hidden rooms too, greyed, as the official app does while editing.
     pub hidden_labels: bool,
 }
@@ -80,6 +94,15 @@ impl MapView {
         if self.view.is_none() {
             self.fit_pending = true;
         }
+    }
+
+    /// Drops the line or rectangle being dragged, so releasing the button draws nothing.
+    /// Returns whether one was being dragged.
+    pub fn cancel_drag(&mut self) -> bool {
+        let dragging = self.drag_from.is_some();
+        self.drag_from = None;
+        self.drag_to = None;
+        dragging
     }
 
     /// World mm per screen point at the current zoom.
@@ -114,8 +137,9 @@ impl MapView {
                     view.zoom_at(to_v2(p), factor);
                 }
             }
-            let drawing = o.drag != Drag::Pan;
-            let draw = drawing && response.dragged_by(egui::PointerButton::Primary);
+            let brush = matches!(o.drag, Drag::Brush(_));
+            let drawing = matches!(o.drag, Drag::Rect | Drag::Line);
+            let draw = (drawing || brush) && response.dragged_by(egui::PointerButton::Primary);
             if !draw
                 && (response.dragged_by(egui::PointerButton::Primary)
                     || response.dragged_by(egui::PointerButton::Secondary)
@@ -141,7 +165,15 @@ impl MapView {
                 self.drag_from = None;
                 self.drag_to = None;
             }
-            if response.clicked() {
+            if brush && (response.dragged_by(egui::PointerButton::Primary) || response.clicked()) {
+                if let Some(p) = response.interact_pointer_pos() {
+                    input = MapInput::Brush(world(p));
+                }
+            } else if response.double_clicked() {
+                if let Some(p) = response.interact_pointer_pos() {
+                    input = MapInput::DoubleClick(world(p));
+                }
+            } else if response.clicked() {
                 if let Some(p) = response.interact_pointer_pos() {
                     input = MapInput::Click(world(p));
                 }
@@ -179,6 +211,37 @@ impl MapView {
         }
         if line.len() > 1 {
             painter.add(Shape::line(line, stroke));
+        }
+
+        // Cells a staged edit moves, in the colour of the room they go to, tinted orange so they
+        // stay visible as staged.
+        let cell_rect = |c: usize, r: usize| {
+            let (x0, y0) = tr.grid_to_world(c as f64, r as f64);
+            let (x1, y1) = tr.grid_to_world(c as f64 + 1.0, r as f64 + 1.0);
+            egui::Rect::from_two_pos(to_screen(Point::new(x0, y0)), to_screen(Point::new(x1, y1)))
+        };
+        if !o.cells.is_empty() {
+            let theme = dreame_map::render::Theme::default();
+            let colours = dreame_map::render::room_colors(map, theme.rooms.len());
+            let tint = Color32::from_rgba_unmultiplied(255, 140, 0, 70);
+            for m in &o.cells {
+                let [r, g, b, _] = colours.get(&m.room).and_then(|&i| theme.rooms.get(i).copied()).unwrap_or([255, 140, 0, 255]);
+                let fill = Color32::from_rgb(r, g, b);
+                for &(c, row) in &m.cells {
+                    let cell = cell_rect(c, row);
+                    painter.rect_filled(cell, 0.0, fill);
+                    painter.rect_filled(cell, 0.0, tint);
+                }
+            }
+        }
+        // The brush under the pointer.
+        if let (Drag::Brush(k), Some(p)) = (o.drag, response.hover_pos()) {
+            let w = view.screen_to_world(&tr, to_v2(p));
+            if let Some((c, r)) = tr.cell_at(w.x, w.y) {
+                let a = cell_rect(c.saturating_sub(k), r.saturating_sub(k));
+                let b = cell_rect(c + k, r + k);
+                painter.rect_stroke(a.union(b), 0.0, Stroke::new(1.5, crate::ACCENT), egui::StrokeKind::Inside);
+            }
         }
 
         // Marks, the chosen zone, and what is being drawn.
