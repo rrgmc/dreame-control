@@ -2,10 +2,11 @@
 //! and saves it to the robot. One change is saved at a time, as in the official app.
 //!
 //! Standard tools: rename, divide and merge rooms; add no-go zones, no-mop zones and virtual
-//! walls; delete one by clicking it. With advanced editing on (Settings), three tools work
+//! walls; delete one by clicking it. With advanced editing on (Settings), four tools work
 //! through a backup and restore of the map: "Move a border" redraws the border between two
-//! rooms, "Delete a room" takes a room and its floor off the map, and "Erase floor" takes the
-//! floor in a rectangle off the map. Both are for floor that does not exist; merging joins a
+//! rooms, "Paint into a room" gives a room the floor of other rooms in drawn rectangles,
+//! "Delete a room" takes a room and its floor off the map, and "Erase floor" takes the
+//! floor in a rectangle off the map. The last two are for floor that does not exist; merging joins a
 //! real room to its neighbour. Hidden rooms can be deleted too. The same setting adds "Map
 //! backup": back up the map to a file, and restore it from one.
 
@@ -35,6 +36,8 @@ enum Tool {
     Draw(ZoneKind),
     /// Advanced: redraw the border of two neighbour rooms.
     Border,
+    /// Advanced: give a room the floor of other rooms in dragged rectangles.
+    Paint,
     /// Advanced: delete a room, giving its floor to a neighbour.
     Remove,
     /// Advanced: make the floor in a dragged rectangle outside the map.
@@ -54,6 +57,10 @@ impl Tool {
                 "Click two rooms that touch, then drag the new border across both. Room names and \
                  settings stay. Saving takes a few minutes.",
             ),
+            Tool::Paint => tr(
+                "Click the room that gets the floor, then drag rectangles over the floor of other \
+                 rooms. Room names and settings stay. Saving takes a few minutes.",
+            ),
             Tool::Remove => tr(
                 "Click a room, hidden or not, whose floor does not exist. The room and its floor \
                  leave the map. To join a real room to its neighbour, merge the two rooms instead. \
@@ -71,7 +78,7 @@ impl Tool {
     fn drag(self) -> Drag {
         match self {
             Tool::Draw(k) if k.is_line() => Drag::Line,
-            Tool::Draw(_) | Tool::Erase => Drag::Rect,
+            Tool::Draw(_) | Tool::Erase | Tool::Paint => Drag::Rect,
             Tool::Divide | Tool::Border => Drag::Line,
             Tool::Select | Tool::Merge | Tool::Remove => Drag::Pan,
         }
@@ -85,6 +92,8 @@ enum Staged {
     Grid { edit: GridEdit, line: Option<Line> },
     /// An erase, an archive edit too.
     Erase(shapes::Erase),
+    /// A paint, an archive edit too.
+    Paint(shapes::Paint),
 }
 
 pub enum EditExit {
@@ -258,6 +267,8 @@ impl EditMap {
             let coloured: Vec<u32> = match (self.tool, self.room, &self.staged) {
                 (_, _, Some(Staged::Map(Edit::MergeRooms(a, b)))) => vec![*a, *b],
                 (_, _, Some(Staged::Erase(e))) => e.cells.keys().copied().collect(),
+                (_, _, Some(Staged::Paint(p))) => std::iter::once(p.room).chain(p.cells.keys().copied()).collect(),
+                (Tool::Paint, Some(r), _) => vec![r],
                 (Tool::Border, Some(a), Some(Staged::Grid { edit: GridEdit::Border { b, .. }, .. })) => vec![a, u32::from(*b)],
                 (Tool::Border, Some(a), _) => match self.selected {
                     Some(Selection::Room(b)) => vec![a, b],
@@ -400,6 +411,7 @@ impl EditMap {
             ui.add_space(10.0);
             ui.label(RichText::new(tr("Advanced")).strong());
             button(ui, Tool::Border, tr("Move a border"));
+            button(ui, Tool::Paint, tr("Paint into a room"));
             button(ui, Tool::Remove, tr("Delete a room"));
             button(ui, Tool::Erase, tr("Erase floor"));
         }
@@ -449,6 +461,11 @@ impl EditMap {
                 }
                 if ui.button(tr("Merge with a neighbour")).clicked() {
                     self.tool = Tool::Merge;
+                    self.reset();
+                    self.room = Some(id);
+                }
+                if self.advanced && ui.button(tr("Paint into this room")).clicked() {
+                    self.tool = Tool::Paint;
                     self.reset();
                     self.room = Some(id);
                 }
@@ -557,6 +574,32 @@ impl EditMap {
                     self.start_remove(r);
                 }
             }
+            (Tool::Paint, MapInput::Click(p)) => {
+                // Hidden rooms too, as for a merge.
+                if let Some(r) = self.map.room_at(p).filter(|r| self.room != Some(*r)) {
+                    self.room = Some(r);
+                    self.staged = None;
+                    self.problem = None;
+                    self.outcome = None;
+                }
+            }
+            (Tool::Paint, MapInput::Rect(a, b)) => {
+                let Some(room) = self.room else {
+                    self.problem = Some(tr("Click the room that gets the floor first.").into());
+                    return;
+                };
+                let Some(rect) = shapes::drawn_rect(a, b, SNAP_MM) else { return };
+                // Each rectangle adds to the ones drawn before.
+                let mut rects = match &self.staged {
+                    Some(Staged::Paint(p)) => p.rects.clone(),
+                    _ => Vec::new(),
+                };
+                rects.push(rect);
+                match shapes::paint_edit(&self.map, room, &rects) {
+                    Some(p) => self.stage(Staged::Paint(p)),
+                    None => self.problem = Some(tr("There is no floor of another room in that rectangle.").into()),
+                }
+            }
             (Tool::Erase, MapInput::Rect(a, b)) => match shapes::erase_edit(&self.map, a, b, SNAP_MM) {
                 Some(e) => self.stage(Staged::Erase(e)),
                 None => self.problem = Some(tr("There is no floor in that rectangle.").into()),
@@ -574,7 +617,11 @@ impl EditMap {
         self.outcome = None;
         self.problem = match &s {
             Staged::Map(e) => mapedit::steps(&self.map, e).err().map(|e| friendly_problem(e, &s)),
-            Staged::Grid { .. } | Staged::Erase(_) => None,
+            Staged::Paint(p) if !p.emptied.is_empty() => {
+                let rooms = p.emptied.iter().map(|r| self.room_name(*r)).collect::<Vec<_>>().join(", ");
+                Some(trf("This takes all of {rooms}. To join two rooms, merge them instead.", &[("rooms", &rooms)]))
+            }
+            Staged::Grid { .. } | Staged::Erase(_) | Staged::Paint(_) => None,
         };
         self.staged = Some(s);
     }
@@ -587,6 +634,7 @@ impl EditMap {
             Staged::Map(e) => backend.apply_edit(&self.robot, self.map.clone(), e),
             Staged::Grid { edit, .. } => backend.apply_grid(&self.robot, self.map.clone(), edit),
             Staged::Erase(e) => backend.apply_grid(&self.robot, self.map.clone(), e.edit),
+            Staged::Paint(p) => backend.apply_grid(&self.robot, self.map.clone(), p.edit),
         }
     }
 
@@ -633,7 +681,7 @@ impl EditMap {
         if let Some(p) = &self.problem {
             ui.colored_label(ui.visuals().error_fg_color, p);
         }
-        if matches!(self.staged, Some(Staged::Grid { .. } | Staged::Erase(_))) {
+        if matches!(self.staged, Some(Staged::Grid { .. } | Staged::Erase(_) | Staged::Paint(_))) {
             ui.label(
                 RichText::new(tr(
                     "This saves through a backup and restore of the robot's map and takes a few minutes. \
@@ -669,6 +717,10 @@ impl EditMap {
                 if let Some(rect) = e.rect {
                     marks.push(Mark { shape: Shape::Rect(rect), colour: Color32::from_rgb(210, 50, 50) });
                 }
+            }
+            Some(Staged::Paint(p)) => {
+                let colour = if self.problem.is_some() { Color32::from_rgb(210, 50, 50) } else { crate::ACCENT };
+                marks.extend(p.rects.iter().map(|r| Mark { shape: Shape::Rect(*r), colour }));
             }
             Some(Staged::Grid { line: None, .. }) | None => {}
         }
@@ -709,6 +761,16 @@ impl EditMap {
                     let rooms = e.emptied.iter().map(|r| self.room_name(*r)).collect::<Vec<_>>().join(", ");
                     trf("{erase}; {rooms} will be deleted", &[("erase", &erase), ("rooms", &rooms)])
                 }
+            }
+            Staged::Paint(p) => {
+                let n: usize = p.cells.values().sum();
+                let from = p.cells.keys().map(|r| self.room_name(*r)).collect::<Vec<_>>().join(", ");
+                trn(
+                    "Give {n} floor cell of {from} to {room}",
+                    "Give {n} floor cells of {from} to {room}",
+                    n as i64,
+                    &[("from", &from), ("room", &self.room_name(p.room))],
+                )
             }
             Staged::Grid { .. } => tr("Room change").into(),
         }

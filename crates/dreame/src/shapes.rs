@@ -295,6 +295,48 @@ pub fn erase_edit(map: &Map, a: Point, b: Point, snap_mm: f64) -> Option<Erase> 
     Some(Erase { edit: GridEdit::Erase { points }, rect: Some(rect), cells, emptied })
 }
 
+/// A paint built from drawn rectangles by [`paint_edit`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct Paint {
+    pub edit: GridEdit,
+    /// The room that gets the cells.
+    pub room: u32,
+    /// The rectangles drawn, snapped, in the order drawn.
+    pub rects: Vec<Rect>,
+    /// Floor cells taken per room.
+    pub cells: std::collections::BTreeMap<u32, usize>,
+    /// Rooms the paint takes every cell of. The archive edit refuses such a paint: merging the
+    /// rooms is the way to remove one.
+    pub emptied: Vec<u32>,
+}
+
+/// Gives `room` the saved map's floor cells of other rooms whose centre lies in one of `rects`
+/// ([`GridEdit::Paint`]). `None` when `room` is not a grid room id or the rectangles hold no
+/// cell of another room.
+pub fn paint_edit(map: &Map, room: u32, rects: &[Rect]) -> Option<Paint> {
+    let id = u8::try_from(room).ok()?;
+    let t = map.transform();
+    let mut cells = std::collections::BTreeMap::<u32, usize>::new();
+    let mut sizes = std::collections::BTreeMap::<u32, usize>::new();
+    let mut points = Vec::new();
+    for r in 0..map.grid.height {
+        for c in 0..map.grid.width {
+            let Some(from) = map.grid.get(c, r).class.segment() else { continue };
+            *sizes.entry(u32::from(from)).or_default() += 1;
+            let (x, y) = t.cell_center(c, r);
+            if from != id && rects.iter().any(|rect| rect_contains(rect, Point::new(x, y))) {
+                *cells.entry(u32::from(from)).or_default() += 1;
+                points.push((x, y));
+            }
+        }
+    }
+    if points.is_empty() {
+        return None;
+    }
+    let emptied = cells.iter().filter(|(r, n)| sizes.get(r) == Some(n)).map(|(r, _)| *r).collect();
+    Some(Paint { edit: GridEdit::Paint { room: id, points }, room, rects: rects.to_vec(), cells, emptied })
+}
+
 /// The erase of every floor cell of `room`, hidden or not. `None` when the room has no cells.
 pub fn erase_room_edit(map: &Map, room: u32) -> Option<Erase> {
     let id = u8::try_from(room).ok()?;
@@ -562,6 +604,28 @@ mod tests {
         let room = erase_room_edit(&m, 1).unwrap();
         assert_eq!((room.edit, room.emptied), (GridEdit::EraseRoom { room: 1 }, vec![1]));
         assert!(erase_room_edit(&m, 2).is_none());
+    }
+
+    #[test]
+    fn paint_takes_cells_of_other_rooms_in_the_rectangles() {
+        let m = two_rooms();
+        let t = m.transform();
+        let around = |c, r| {
+            let (x, y) = t.cell_center(c, r);
+            Rect::new(x - 10.0, y - 10.0, x + 10.0, y + 10.0)
+        };
+        // Column 3 is room 2's left column; column 2 is room 1, which is skipped.
+        let p = paint_edit(&m, 1, &[around(2, 1), around(3, 1), around(3, 2)]).unwrap();
+        let GridEdit::Paint { room: 1, points } = &p.edit else { panic!("expected a paint into room 1: {:?}", p.edit) };
+        assert_eq!(points.len(), 2);
+        assert_eq!(p.cells, [(2, 2)].into());
+        assert!(p.emptied.is_empty());
+        assert_eq!(p.rects.len(), 3);
+        let all = paint_edit(&m, 1, &[Rect::new(-1000.0, -1000.0, 1000.0, 1000.0)]).unwrap();
+        // Wall cells carry their room too (0x82 is room 2), so the whole map gives all 12.
+        assert_eq!((all.cells, all.emptied), ([(2, 12)].into(), vec![2]));
+        assert!(paint_edit(&m, 1, &[around(1, 1)]).is_none(), "only room 1's own floor");
+        assert!(paint_edit(&m, 1, &[]).is_none());
     }
 
     #[test]
