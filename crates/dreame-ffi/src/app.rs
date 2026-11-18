@@ -452,10 +452,11 @@ impl HomeMap {
         Ok(render_png(&m, &opts)?)
     }
 
-    /// The rooms in the saved cleaning order.
+    /// The shown rooms in the saved cleaning order, then the hidden rooms.
     pub fn rooms(&self) -> Vec<RoomInfo> {
         dreame::shapes::initial_order(&self.map)
             .into_iter()
+            .chain(self.map.hidden_rooms())
             .filter_map(|id| self.map.rooms.get(&id))
             .map(|r| RoomInfo {
                 id: r.id,
