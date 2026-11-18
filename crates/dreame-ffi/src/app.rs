@@ -820,6 +820,16 @@ impl HomeRobot {
         Ok(())
     }
 
+    /// Sends the robot to a point of the map (cell space). It drives there without cleaning
+    /// and stops. The point must lie on the floor of a room that is not hidden.
+    pub async fn go_to(&self, point: CellPoint) -> Result<()> {
+        let map = self.inner.map().ok_or_else(no_map)?;
+        let p = map.to_world(point.x, point.y);
+        self.inner.robot().go_to(&map.map, p).await?;
+        self.inner.after_command().await;
+        Ok(())
+    }
+
     /// Cleans a zone drawn on the map, `passes` times, at the current suction.
     pub async fn clean_zone(&self, zone: CellRect, passes: u32) -> Result<()> {
         let map = self.inner.map().ok_or_else(no_map)?;
