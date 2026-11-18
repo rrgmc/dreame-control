@@ -459,6 +459,40 @@ impl Segmentation {
         self.assign(&take, into)
     }
 
+    /// Erases floor cells: each cell that belongs to a room becomes outside (0) in all four
+    /// images, with its carpet and wall bits cleared. Cells already outside, or outside the
+    /// image, are skipped. A room may lose every cell; [`crate::roomreg::forget_room`] then takes
+    /// it out of the room lists. Refused when no room would keep a cell.
+    pub fn erase(&mut self, cells: &[(u32, u32)]) -> Result<Changes> {
+        let mut take = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for &(x, y) in cells {
+            if matches!(self.room_at(x, y), Some(r) if r != 0) && seen.insert((x, y)) {
+                take.push((x, y));
+            }
+        }
+        if take.is_empty() {
+            return Err(Error::Unsupported("the area holds no floor cells".into()));
+        }
+        if take.len() == self.room_sizes().values().sum::<usize>() {
+            return Err(Error::Unsupported("the area holds the whole floor; erase less".into()));
+        }
+        let mut ch = Changes::default();
+        for (x, y) in take {
+            let i = self.index(x as i64, y as i64).expect("checked by room_at");
+            self.grid[i] = 0;
+            ch.cells.push((x, y));
+            for (k, p) in self.plain.iter_mut().enumerate() {
+                if p[i] != 0 {
+                    p[i] = 0;
+                    ch.plain[k] += 1;
+                }
+            }
+        }
+        self.dirty = true;
+        Ok(ch)
+    }
+
     /// The cells of other rooms move to `room`; room-0 cells stay. Refused when a room would lose
     /// every cell.
     fn take_cells(&mut self, room: u8, cells: &[(u32, u32)]) -> Result<Changes> {
@@ -680,6 +714,22 @@ mod tests {
         assert_eq!(ch.cells, [(3, 0)]);
         assert_eq!(s.room_sizes(), [(1, 1), (2, 2)].into());
         assert_eq!(s.plain[0], [1, 0, 2, 2], "plain images follow");
+    }
+
+    #[test]
+    fn erase_makes_cells_outside() {
+        // Room 1 (one carpet cell, one wall cell), outside, room 2, room 2.
+        let mut s = seg(5, 1, vec![1 | 0x40, 1 | 0x80, 0, 2, 2]);
+        let ch = s.erase(&[(0, 0), (1, 0), (2, 0), (3, 0), (3, 0), (9, 9)]).unwrap();
+        assert_eq!(ch.cells, [(0, 0), (1, 0), (3, 0)], "outside and off-image cells skipped, repeats once");
+        // The wall cell is already 0 in the plain images.
+        assert_eq!(ch.plain, [2, 2, 2]);
+        assert_eq!(s.grid, [0, 0, 0, 0, 2]);
+        assert_eq!(s.plain[2], [0, 0, 0, 0, 2]);
+        assert_eq!(s.room_sizes(), [(2, 1)].into(), "room 1 has no cells left");
+        assert!(s.dirty);
+        assert!(s.erase(&[(0, 0), (2, 0)]).is_err(), "no floor cells");
+        assert!(s.erase(&[(4, 0)]).is_err(), "the whole floor");
     }
 
     #[test]

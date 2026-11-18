@@ -265,6 +265,45 @@ pub fn remove_room_edit(map: &Map, room: u32, into: u32) -> Option<GridEdit> {
     Some(GridEdit::RemoveRoom { room: u8::try_from(room).ok()?, into: u8::try_from(into).ok()? })
 }
 
+/// An erase built from a drawn rectangle by [`erase_edit`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct Erase {
+    pub edit: GridEdit,
+    /// The rectangle, snapped.
+    pub rect: Rect,
+    /// Floor cells erased per room.
+    pub cells: std::collections::BTreeMap<u32, usize>,
+    /// Rooms left without floor; the edit deletes them.
+    pub emptied: Vec<u32>,
+}
+
+/// The erase of the saved map's floor cells whose centre lies in the drawn rectangle, ends
+/// snapped to `snap_mm`. `None` when the rectangle has no size or holds no floor cell. The edit
+/// is refused later if it holds the whole floor.
+pub fn erase_edit(map: &Map, a: Point, b: Point, snap_mm: f64) -> Option<Erase> {
+    let rect = drawn_rect(a, b, snap_mm)?;
+    let t = map.transform();
+    let mut cells = std::collections::BTreeMap::<u32, usize>::new();
+    let mut sizes = std::collections::BTreeMap::<u32, usize>::new();
+    let mut points = Vec::new();
+    for r in 0..map.grid.height {
+        for c in 0..map.grid.width {
+            let Some(room) = map.grid.get(c, r).class.segment().map(u32::from) else { continue };
+            *sizes.entry(room).or_default() += 1;
+            let (x, y) = t.cell_center(c, r);
+            if rect_contains(&rect, Point::new(x, y)) {
+                *cells.entry(room).or_default() += 1;
+                points.push((x, y));
+            }
+        }
+    }
+    if points.is_empty() {
+        return None;
+    }
+    let emptied = cells.iter().filter(|(r, n)| sizes.get(r) == Some(n)).map(|(r, _)| *r).collect();
+    Some(Erase { edit: GridEdit::Erase { points }, rect, cells, emptied })
+}
+
 /// The full hidden-room list after hiding or showing room `id`, sorted.
 pub fn toggled_hidden(map: &Map, id: u32, hide: bool) -> Vec<u32> {
     let mut ids: Vec<u32> = map.hidden_rooms().into_iter().filter(|&r| r != id).collect();
@@ -518,6 +557,21 @@ mod tests {
         assert_eq!(delete_edit(Selection::Room(3)), None);
         assert_eq!(distance_to_line(Point::new(0.0, 5.0), &Line::new(-10.0, 0.0, 10.0, 0.0)), 5.0);
         assert_eq!(distance_to_line(Point::new(13.0, 4.0), &Line::new(-10.0, 0.0, 10.0, 0.0)), 5.0);
+    }
+
+    #[test]
+    fn erase_picks_floor_cells_in_the_rectangle() {
+        let m = map();
+        let (x, y) = m.transform().cell_center(0, 0);
+        let one = erase_edit(&m, Point::new(x - 10.0, y - 10.0), Point::new(x + 10.0, y + 10.0), 1.0).unwrap();
+        assert_eq!(one.edit, GridEdit::Erase { points: vec![(x, y)] });
+        assert_eq!(one.cells, [(1, 1)].into());
+        assert!(one.emptied.is_empty());
+        let all = erase_edit(&m, Point::new(-500.0, -500.0), Point::new(500.0, 500.0), 50.0).unwrap();
+        assert_eq!(all.cells, [(1, 4)].into());
+        assert_eq!(all.emptied, [1]);
+        assert!(erase_edit(&m, Point::new(1000.0, 1000.0), Point::new(2000.0, 2000.0), 50.0).is_none(), "no floor there");
+        assert!(erase_edit(&m, Point::new(0.0, 0.0), Point::new(0.0, 500.0), 50.0).is_none(), "no width");
     }
 
     #[test]

@@ -61,10 +61,11 @@ pub async fn download(c: &CloudClient, dev: &DeviceInfo, e: &Entry) -> Result<Ve
 }
 
 /// Applies `edit` to an archive and returns the new archive file: the segmentation images, and
-/// for [`GridEdit::NewRoom`] the room registries too. Every other member stays as it was.
+/// for the edits that add or remove rooms the room registries too. Every other member stays as it was.
 pub fn edit_archive(tbz2: &[u8], edit: &GridEdit) -> Result<(Vec<u8>, Changes, Option<Registered>)> {
     let mut a = Archive::decode(tbz2).context("decode the archive")?;
     let mut s = Segmentation::read(&a).context("read the room grid")?;
+    let before = s.room_sizes();
     let ch = edit.run(&mut s)?;
     if ch.cells.is_empty() {
         bail!("the edit changed no cell");
@@ -74,6 +75,14 @@ pub fn edit_archive(tbz2: &[u8], edit: &GridEdit) -> Result<(Vec<u8>, Changes, O
         (Some((new, parent, meta)), _) => Some(Registered::Added(roomreg::add_room(&mut a, &s, new, parent, meta).context("register the new room")?)),
         (None, GridEdit::RemoveRoom { room, into }) => {
             Some(Registered::Removed(roomreg::remove_room(&mut a, &s, *room, *into).context("take the room out of the room lists")?))
+        }
+        (None, GridEdit::Erase { .. }) => {
+            let after = s.room_sizes();
+            let gone: Vec<u8> = before.keys().copied().filter(|r| !after.contains_key(r)).collect();
+            for r in &gone {
+                roomreg::forget_room(&mut a, &s, *r).with_context(|| format!("take room {r} out of the room lists"))?;
+            }
+            (!gone.is_empty()).then_some(Registered::Erased(gone))
         }
         _ => None,
     };
@@ -85,6 +94,8 @@ pub fn edit_archive(tbz2: &[u8], edit: &GridEdit) -> Result<(Vec<u8>, Changes, O
 pub enum Registered {
     Added(Added),
     Removed(Removed),
+    /// Rooms an erase left without floor, taken out of the room lists.
+    Erased(Vec<u8>),
 }
 
 impl std::fmt::Display for Registered {
@@ -92,6 +103,7 @@ impl std::fmt::Display for Registered {
         match self {
             Self::Added(r) => write!(f, "new room registered: neighbours {:?}, cleaning order place {}, in {:?}", r.neighbours, r.order, r.members),
             Self::Removed(r) => write!(f, "room taken out of the room lists (cleaning order place {:?}), in {:?}", r.order, r.members),
+            Self::Erased(rooms) => write!(f, "rooms left without floor, taken out of the room lists: {rooms:?}"),
         }
     }
 }
@@ -168,6 +180,10 @@ pub enum GridEdit {
     /// Set or clear the wall bit on a line (world mm) ([`Segmentation::set_wall`]). The robot
     /// ignores these walls and clears them after its next run (W23).
     Wall { from: (f64, f64), to: (f64, f64), wall: bool },
+    /// Make the floor cells at these points (world mm) outside ([`Segmentation::erase`]). A room
+    /// left without cells is taken out of the room lists ([`roomreg::forget_room`]). Not yet
+    /// run on a robot: it may rebuild the floor from its occupancy data.
+    Erase { points: Vec<(f64, f64)> },
 }
 
 impl GridEdit {
@@ -193,6 +209,10 @@ impl GridEdit {
                 let cells = s.line(s.cell_at_mm(from.0, from.1), s.cell_at_mm(to.0, to.1));
                 Ok(s.set_wall(&cells, *wall))
             }
+            Self::Erase { points } => {
+                let cells = s.cells_at_mm(points);
+                s.erase(&cells)
+            }
         }
     }
 
@@ -215,7 +235,7 @@ impl GridEdit {
             Self::Split { room, new, .. } | Self::NewRoom { room, new, .. } => vec![*room, *new],
             Self::PaintNewRoom { new, parent, .. } => vec![*parent, *new],
             Self::RemoveRoom { room, into } => vec![*room, *into],
-            Self::Wall { .. } => Vec::new(),
+            Self::Wall { .. } | Self::Erase { .. } => Vec::new(),
         }
     }
 }
@@ -510,6 +530,11 @@ pub async fn apply(robot: &CloudRobot, edit: &GridEdit, opts: &Options, progress
     }
     if let GridEdit::RemoveRoom { room, .. } = *edit {
         snapshot.rooms.remove(&u32::from(room));
+    }
+    if let Some(Registered::Erased(rooms)) = &lists {
+        for r in rooms {
+            snapshot.rooms.remove(&u32::from(*r));
+        }
     }
     let settings = put_back_settings(robot, snapshot, &opts.dir, &opts.stamp).await;
     progress(
