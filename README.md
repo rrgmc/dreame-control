@@ -11,6 +11,50 @@ Dreame Control is also a Rust library that other programs can use. See [RUST.md]
 > [!WARNING]
 > This project is not affiliated with or endorsed by Dreame. Use it at your own risk: commands and map edits change the robot's state.
 
+## Screenshots
+
+### Desktop (Windows)
+
+<p align="center">
+  <img src="docs/screenshots/desktop-home.png" width="720" alt="The home screen: the live map with the robot and the cleaning controls">
+</p>
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/desktop-edit-map.png" width="400" alt="Map editing: rooms, no-go zones, no-mop zones and virtual walls"></td>
+    <td><img src="docs/screenshots/desktop-rooms.png" width="400" alt="Room settings: suction, water, passes, mode and cleaning order"></td>
+  </tr>
+  <tr>
+    <td align="center">Map editing</td>
+    <td align="center">Room settings</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/desktop-history.png" width="400" alt="Cleaning history with the path of the selected job"></td>
+    <td><img src="docs/screenshots/desktop-robot.png" width="400" alt="Robot settings and maintenance"></td>
+  </tr>
+  <tr>
+    <td align="center">Cleaning history</td>
+    <td align="center">Robot settings and maintenance</td>
+  </tr>
+</table>
+
+### Android
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/android-sign-in.png" width="190" alt="Sign-in screen"></td>
+    <td><img src="docs/screenshots/android-home.png" width="190" alt="The home screen with the live map"></td>
+    <td><img src="docs/screenshots/android-rooms.png" width="190" alt="Room settings"></td>
+    <td><img src="docs/screenshots/android-robot.png" width="190" alt="Robot settings"></td>
+  </tr>
+  <tr>
+    <td align="center">Sign in</td>
+    <td align="center">Home</td>
+    <td align="center">Rooms</td>
+    <td align="center">Robot</td>
+  </tr>
+</table>
+
 ## Supported robots
 
 The only tested robot is the Dreame L40 Ultra AE (`dreame.vacuum.r2579a`). Other Dreame vacuums use the same cloud and the same device model, so they may work in part.
