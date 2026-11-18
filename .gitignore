@@ -1,6 +1,7 @@
 target/
 local/
 .claude/worktrees/
+CLAUDE.local.md
 __pycache__/
 *.pyc
 dist/
