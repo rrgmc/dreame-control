@@ -52,6 +52,14 @@ impl Tool {
             Tool::Merge => tr("Click two rooms that touch each other."),
             Tool::Draw(ZoneKind::NoGo) => tr("Drag a rectangle. The robot will not enter it."),
             Tool::Draw(ZoneKind::NoMop) => tr("Drag a rectangle. The robot will vacuum but not mop there."),
+            Tool::Draw(ZoneKind::Carpet) => tr("Drag a rectangle over a carpet the robot did not find."),
+            Tool::Draw(ZoneKind::RoundCarpet) => tr("Drag a rectangle around a round carpet the robot did not find."),
+            Tool::Draw(ZoneKind::IgnoredCarpet) => {
+                tr("Drag a rectangle over something the robot takes for a carpet, such as a dark rug or mat. It will treat it as floor.")
+            }
+            Tool::Draw(ZoneKind::Threshold) => tr("Drag a line along a door sill. The robot will cross it with care."),
+            Tool::Draw(ZoneKind::ImpassableThreshold) => tr("Drag a line along a door sill the robot cannot climb. It will not try."),
+            Tool::Draw(ZoneKind::Curtain) => tr("Drag a line along a curtain. The robot will pass under it with care."),
             Tool::Draw(_) => tr("Drag a line. The robot will not cross it."),
             Tool::Border => tr(
                 "Click two rooms that touch, then drag the new border across both. Room names and \
@@ -250,11 +258,13 @@ impl EditMap {
         });
 
         egui::Panel::left("tools").resizable(false).exact_size(230.0).show(ui, |ui| {
-            ui.add_enabled_ui(!self.saving && can_edit, |ui| self.toolbox(ui, backend));
-            if !can_edit {
-                ui.add_space(8.0);
-                ui.colored_label(ui.visuals().warn_fg_color, tr("The map can be edited while the robot is not cleaning."));
-            }
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.add_enabled_ui(!self.saving && can_edit, |ui| self.toolbox(ui, backend));
+                if !can_edit {
+                    ui.add_space(8.0);
+                    ui.colored_label(ui.visuals().warn_fg_color, tr("The map can be edited while the robot is not cleaning."));
+                }
+            });
         });
 
         egui::Panel::bottom("edit-bottom").show(ui, |ui| {
@@ -407,6 +417,18 @@ impl EditMap {
         button(ui, Tool::Draw(ZoneKind::NoGo), &zone_name(ZoneKind::NoGo));
         button(ui, Tool::Draw(ZoneKind::NoMop), &zone_name(ZoneKind::NoMop));
         button(ui, Tool::Draw(ZoneKind::Wall), &zone_name(ZoneKind::Wall));
+        ui.add_space(10.0);
+        ui.label(RichText::new(tr("Floor")).strong());
+        for kind in [
+            ZoneKind::Carpet,
+            ZoneKind::RoundCarpet,
+            ZoneKind::IgnoredCarpet,
+            ZoneKind::Threshold,
+            ZoneKind::ImpassableThreshold,
+            ZoneKind::Curtain,
+        ] {
+            button(ui, Tool::Draw(kind), &zone_name(kind));
+        }
         if self.advanced {
             ui.add_space(10.0);
             ui.label(RichText::new(tr("Advanced")).strong());
@@ -490,11 +512,9 @@ impl EditMap {
                 self.staged = None;
                 self.problem = None;
                 self.outcome = None;
-                // Only the kinds this app edits can be picked.
+                // Zones and lines can be picked; furniture cannot.
                 self.selected = match shapes::hit(&self.map, p, tolerance) {
-                    Some(Selection::Zone(k, i)) if matches!(k, ZoneKind::NoGo | ZoneKind::NoMop | ZoneKind::Wall) => {
-                        Some(Selection::Zone(k, i))
-                    }
+                    Some(Selection::Zone(k, i)) => Some(Selection::Zone(k, i)),
                     _ => match self.map.room_at(p) {
                         Some(r) if !self.visible(r) => {
                             self.unhide = Some(r);
@@ -695,7 +715,9 @@ impl EditMap {
     }
 
     fn marks(&self) -> Vec<Mark> {
-        let mut marks = Vec::new();
+        // The map image does not show "not a carpet" areas, so outline them here.
+        let mut marks: Vec<Mark> =
+            self.map.ignored_carpet.iter().map(|r| Mark { shape: Shape::Rect(*r), colour: Color32::from_gray(150) }).collect();
         if let Some(Selection::Zone(kind, i)) = self.selected {
             if let Some(shape) = kind.shapes(&self.map).get(i) {
                 marks.push(Mark { shape: *shape, colour: Color32::from_rgb(230, 120, 30) });
@@ -740,6 +762,18 @@ impl EditMap {
                 Edit::MergeRooms(a, b) => trf("Merge {room} and {other}", &[("room", &self.room_name(*a)), ("other", &self.room_name(*b))]),
                 Edit::RenameRoom { id, name } => trf("Rename {room} to {name}", &[("room", &self.room_name(*id)), ("name", name)]),
                 Edit::HideRooms(_) => tr("Show the hidden area again").into(),
+                Edit::AddCarpet(_) => tr("New carpet").into(),
+                Edit::AddRoundCarpet(_) => tr("New round carpet").into(),
+                Edit::AddIgnoredCarpet(_) => tr("New \"not a carpet\" area").into(),
+                Edit::AddThreshold(_) => tr("New threshold").into(),
+                Edit::AddImpassableThreshold(_) => tr("New threshold the robot does not cross").into(),
+                Edit::AddCurtain(_) => tr("New curtain").into(),
+                Edit::RemoveCarpet(_) => tr("Delete the carpet").into(),
+                Edit::RemoveIgnoredCarpet(_) => tr("Delete the \"not a carpet\" area").into(),
+                Edit::RemoveThreshold(_) => tr("Delete the threshold").into(),
+                Edit::RemoveImpassableThreshold(_) => tr("Delete the threshold the robot does not cross").into(),
+                Edit::RemoveCurtain(_) => tr("Delete the curtain").into(),
+                Edit::RemoveRamp(_) => tr("Delete the ramp").into(),
                 other => format!("{other:?}"),
             },
             Staged::Grid { edit: GridEdit::Border { a, b, .. }, .. } => {
@@ -808,7 +842,13 @@ fn zone_name(kind: ZoneKind) -> String {
         ZoneKind::NoGo => tr("No-go zone").into(),
         ZoneKind::NoMop => tr("No-mop zone").into(),
         ZoneKind::Wall => tr("Virtual wall").into(),
-        other => crate::phase::capitalise(tr(other.label())),
+        ZoneKind::Carpet => tr("Carpet").into(),
+        ZoneKind::RoundCarpet => tr("Round carpet").into(),
+        ZoneKind::IgnoredCarpet => tr("Not a carpet").into(),
+        ZoneKind::Threshold => tr("Threshold").into(),
+        ZoneKind::ImpassableThreshold => tr("Threshold, do not cross").into(),
+        ZoneKind::Curtain => tr("Curtain").into(),
+        ZoneKind::Ramp => tr("Ramp").into(),
     }
 }
 
@@ -818,7 +858,11 @@ fn delete_label(kind: ZoneKind) -> String {
         ZoneKind::NoGo => tr("Delete this no-go zone").into(),
         ZoneKind::NoMop => tr("Delete this no-mop zone").into(),
         ZoneKind::Wall => tr("Delete this virtual wall").into(),
-        other => trf("Delete this {kind}", &[("kind", &tr(other.label()))]),
+        ZoneKind::Carpet | ZoneKind::RoundCarpet => tr("Delete this carpet").into(),
+        ZoneKind::IgnoredCarpet => tr("Delete this \"not a carpet\" area").into(),
+        ZoneKind::Threshold | ZoneKind::ImpassableThreshold => tr("Delete this threshold").into(),
+        ZoneKind::Curtain => tr("Delete this curtain").into(),
+        ZoneKind::Ramp => tr("Delete this ramp").into(),
     }
 }
 
