@@ -2,8 +2,10 @@
 //! and saves it to the robot. One change is saved at a time, as in the official app.
 //!
 //! Standard tools: rename, divide and merge rooms; add no-go zones, no-mop zones and virtual
-//! walls; delete one by clicking it. With advanced editing on (Settings), "Move a border"
-//! redraws the border between two rooms through a backup and restore of the map.
+//! walls; delete one by clicking it. With advanced editing on (Settings), two tools work
+//! through a backup and restore of the map: "Move a border" redraws the border between two
+//! rooms, and "Delete a room" gives a room's floor to a neighbour and removes the room. Hidden
+//! rooms can be deleted too.
 
 use crate::backend::{Backend, LoadedMap, Msg, SharedRobot};
 use crate::mapview::{Drag, Mark, MapInput, MapView, Overlay};
@@ -30,6 +32,8 @@ enum Tool {
     Draw(ZoneKind),
     /// Advanced: redraw the border of two neighbour rooms.
     Border,
+    /// Advanced: delete a room, giving its floor to a neighbour.
+    Remove,
 }
 
 impl Tool {
@@ -45,6 +49,10 @@ impl Tool {
                 "Click two rooms that touch, then drag the new border across both. Room names and \
                  settings stay. Saving takes a few minutes.",
             ),
+            Tool::Remove => tr(
+                "Click the room to delete, hidden or not, then a room next to it. That room takes \
+                 the floor and keeps its name and settings. Saving takes a few minutes.",
+            ),
         }
     }
 
@@ -53,7 +61,7 @@ impl Tool {
             Tool::Draw(k) if k.is_line() => Drag::Line,
             Tool::Draw(_) => Drag::Rect,
             Tool::Divide | Tool::Border => Drag::Line,
-            Tool::Select | Tool::Merge => Drag::Pan,
+            Tool::Select | Tool::Merge | Tool::Remove => Drag::Pan,
         }
     }
 }
@@ -61,7 +69,8 @@ impl Tool {
 /// A change ready to save.
 enum Staged {
     Map(Edit),
-    Grid { edit: GridEdit, line: Line },
+    /// An archive edit; `line` is drawn on the map when the edit has one.
+    Grid { edit: GridEdit, line: Option<Line> },
 }
 
 pub enum EditExit {
@@ -190,12 +199,15 @@ impl EditMap {
         egui::CentralPanel::default().frame(egui::Frame::NONE).show(ui, |ui| {
             let coloured: Vec<u32> = match (self.tool, self.room, &self.staged) {
                 (_, _, Some(Staged::Map(Edit::MergeRooms(a, b)))) => vec![*a, *b],
+                (_, _, Some(Staged::Grid { edit: GridEdit::RemoveRoom { room, into }, .. })) => {
+                    vec![u32::from(*room), u32::from(*into)]
+                }
                 (Tool::Border, Some(a), Some(Staged::Grid { edit: GridEdit::Border { b, .. }, .. })) => vec![a, u32::from(*b)],
                 (Tool::Border, Some(a), _) => match self.selected {
                     Some(Selection::Room(b)) => vec![a, b],
                     _ => vec![a],
                 },
-                (Tool::Divide | Tool::Merge, Some(r), _) => vec![r],
+                (Tool::Divide | Tool::Merge | Tool::Remove, Some(r), _) => vec![r],
                 _ => match self.selected {
                     Some(Selection::Room(r)) => vec![r],
                     _ => Vec::new(),
@@ -231,6 +243,10 @@ impl EditMap {
                     if ui.add(b).clicked() {
                         let ids = shapes::toggled_hidden(&self.map, id, false);
                         self.save(backend, Staged::Map(Edit::HideRooms(ids)));
+                        close = true;
+                    }
+                    if self.advanced && ui.button(tr("Delete it")).clicked() {
+                        self.start_remove(id);
                         close = true;
                     }
                     if ui.button(tr("Cancel")).clicked() {
@@ -297,6 +313,7 @@ impl EditMap {
             ui.add_space(10.0);
             ui.label(RichText::new(tr("Advanced")).strong());
             button(ui, Tool::Border, tr("Move a border"));
+            button(ui, Tool::Remove, tr("Delete a room"));
         }
         if tool != self.tool {
             self.tool = tool;
@@ -323,6 +340,9 @@ impl EditMap {
                     self.tool = Tool::Merge;
                     self.reset();
                     self.room = Some(id);
+                }
+                if self.advanced && ui.button(tr("Delete this room")).clicked() {
+                    self.start_remove(id);
                 }
             }
             Some(Selection::Zone(kind, i)) => {
@@ -369,13 +389,18 @@ impl EditMap {
                 }
                 None => self.problem = Some(tr("Drag the line across a room.").into()),
             },
-            (Tool::Merge | Tool::Border, MapInput::Click(p)) => {
-                // Hidden rooms may be merged too, such as a grey area into the room beside it.
+            (Tool::Merge | Tool::Border | Tool::Remove, MapInput::Click(p)) => {
+                // Hidden rooms may be merged or deleted too, such as a grey area beside a room.
                 let Some(r) = self.map.room_at(p) else { return };
                 match self.room {
                     Some(first) if first != r && shapes::merge_partners(&self.map, first).contains(&r) => {
                         if self.tool == Tool::Merge {
                             self.stage(Staged::Map(Edit::MergeRooms(first, r)));
+                        } else if self.tool == Tool::Remove {
+                            match shapes::remove_room_edit(&self.map, first, r) {
+                                Some(edit) => self.stage(Staged::Grid { edit, line: None }),
+                                None => self.problem = Some(tr("These rooms cannot be changed this way.").into()),
+                            }
                         } else {
                             self.staged = None;
                             self.problem = None;
@@ -411,7 +436,7 @@ impl EditMap {
                     Ok(_) => match (u8::try_from(ra), u8::try_from(rb)) {
                         (Ok(a8), Ok(b8)) => self.stage(Staged::Grid {
                             edit: GridEdit::Border { a: a8, b: b8, line: vec![(line.a.x, line.a.y), (line.b.x, line.b.y)] },
-                            line,
+                            line: Some(line),
                         }),
                         _ => self.problem = Some(tr("These rooms cannot be changed this way.").into()),
                     },
@@ -520,8 +545,8 @@ impl EditMap {
                     marks.push(Mark { shape, colour });
                 }
             }
-            Some(Staged::Grid { line, .. }) => marks.push(Mark { shape: Shape::Line(*line), colour: crate::ACCENT }),
-            None => {}
+            Some(Staged::Grid { line: Some(line), .. }) => marks.push(Mark { shape: Shape::Line(*line), colour: crate::ACCENT }),
+            Some(Staged::Grid { line: None, .. }) | None => {}
         }
         marks
     }
@@ -547,8 +572,19 @@ impl EditMap {
                     &[("room", &self.room_name(u32::from(*a))), ("other", &self.room_name(u32::from(*b)))],
                 )
             }
+            Staged::Grid { edit: GridEdit::RemoveRoom { room, into }, .. } => trf(
+                "Delete {room}; {other} takes its floor",
+                &[("room", &self.room_name(u32::from(*room))), ("other", &self.room_name(u32::from(*into)))],
+            ),
             Staged::Grid { .. } => tr("Room change").into(),
         }
+    }
+
+    /// Switches to "Delete a room" with `id`, hidden or not, as the room to delete.
+    fn start_remove(&mut self, id: u32) {
+        self.tool = Tool::Remove;
+        self.reset();
+        self.room = Some(id);
     }
 
     fn visible(&self, id: u32) -> bool {
