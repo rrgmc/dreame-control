@@ -1656,10 +1656,11 @@ the next cleaning run; the saved order in 6.8 stays intact.
   parent's type, floor and settings; `RemoveRoom` gives a room's cells to a neighbour and
   removes it. Adding and then removing a room gives back the original archive (fixture test).
 - `Segmentation::erase` makes floor cells outside (0) in all four images; `GridEdit::Erase` also
-  takes a room left without cells out of the room lists (`roomreg::forget_room`). Untested on the
-  robot (W34).
+  takes a room left without cells out of the room lists (`roomreg::forget_room`), and
+  `GridEdit::EraseRoom` erases exactly one room. The robot loads an erase (W34); whether it lasts
+  through a run is open.
 - `dreame::archiveedit` holds the robot steps.
-- The CLI runs them with `dreame map edit-archive <grow|paint|border|split|new-room|paint-new-room|remove-room|erase|wall> ... --apply`.
+- The CLI runs them with `dreame map edit-archive <grow|paint|border|split|new-room|paint-new-room|remove-room|erase|erase-room|wall> ... --apply`.
   Without `--apply` it only edits an archive file.
 - The desktop editor offers three tools: the paint brush (round, or a dragged box), "Paint a new
   room out of this room" (the same brush into an unused id, with a name and a floor), and Move
@@ -1935,4 +1936,4 @@ decode, compare, then revert.
 | W31 | `map edit-archive remove-room 14 8 --apply` | Nothing to revert. **Done 2026-11-17**: 6.8 equalled the map before W30 in every cell and trailer key |
 | W32 | Editor: a new room out of room 8 with a name and a wood floor; then clean it | W33 removes it. **Done 2026-11-17**: name and floor kept through the run |
 | W33 | `remove-room 14 8 --apply`, then clean room 8 | Nothing to revert. **Done 2026-11-17**: room 14 stayed gone after the run; the robot got stuck once and resumed on action 2.1 |
-| W34 | Editor "Erase floor" (or `map edit-archive erase`) over floor that does not exist; read 6.8, then clean a neighbour room and read it again | Restore the kept backup with `restore-file`, then `restore-settings`. **Not run yet**: the occupancy still marks the area as free floor, and occupancy edits are ignored (W16), so the robot may rebuild the floor |
+| W34 | `map edit-archive erase-room 9 --apply`: erase hidden room 9 (1,079 cells of floor that does not exist); read 6.8, then clean a neighbour room and read it again | Restore the kept backup with `restore-file`, then `restore-settings`. **Loaded 2026-11-18**: 6.8 then had 12 rooms and no room 9, and the area was outside; no other room changed size. The occupancy still marks the area as free floor (W16), so whether it lasts through a cleaning run is not yet known |

@@ -181,8 +181,8 @@ pub enum GridEdit {
     /// ignores these walls and clears them after its next run (W23).
     Wall { from: (f64, f64), to: (f64, f64), wall: bool },
     /// Make the floor cells at these points (world mm) outside ([`Segmentation::erase`]). A room
-    /// left without cells is taken out of the room lists ([`roomreg::forget_room`]). Not yet
-    /// run on a robot: it may rebuild the floor from its occupancy data.
+    /// left without cells is taken out of the room lists ([`roomreg::forget_room`]). The robot
+    /// loads it (W34); it may rebuild the floor from its occupancy data on a later run.
     Erase { points: Vec<(f64, f64)> },
     /// Erase every cell of `room` and take it out of the room lists, like `Erase`
     /// ([`Segmentation::erase_room`]).

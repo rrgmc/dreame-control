@@ -501,8 +501,8 @@ enum ArchiveEditCmd {
     /// (`seg_info`, cleaning order, neighbour table, AI room list, hidden rooms). Research (W31).
     RemoveRoom { room: u8, into: u8 },
     /// Make the floor cells inside the rectangle (X0, Y0)-(X1, Y1), in world mm, outside every
-    /// room. A room left without cells is taken out of the room lists. Not yet run on a robot
-    /// (W34): it may rebuild the floor from what it senses.
+    /// room. A room left without cells is taken out of the room lists. The robot loads it
+    /// (W34); it may rebuild the floor from what it senses on a later run.
     #[command(allow_negative_numbers = true)]
     Erase { x0: f64, y0: f64, x1: f64, y1: f64 },
     /// Erase every floor cell of ROOM, like `erase`, and take ROOM out of the room lists.
