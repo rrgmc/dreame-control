@@ -87,6 +87,7 @@ fn main() -> eframe::Result {
         options,
         Box::new(|cc| {
             let paths = Paths::system();
+            keep_running_on_gpu_errors(cc, &paths);
             let backend = Backend::new(cc.egui_ctx.clone(), paths.clone()).map_err(|e| e.to_string())?;
             let prefs = Prefs::load(&paths);
             apply_language(prefs.language.as_deref());
@@ -94,6 +95,26 @@ fn main() -> eframe::Result {
             Ok(Box::new(App::new(backend, prefs)))
         }),
     )
+}
+
+/// Keeps the window within what the GPU can draw, and logs GPU errors that nothing else handles.
+///
+/// The window's surface cannot be larger than the GPU's largest texture (often 8192 pixels).
+/// egui-wgpu configures the surface at any window size, and wgpu panics on the error by default,
+/// so a window resized past the limit (by another program, or across very large monitors) closed
+/// the app. The user can no longer drag the window past the limit. A program that sets the size
+/// directly still can; the error is then logged instead of closing the app, the surface keeps its
+/// last size, and the next resize within the limit configures it again.
+fn keep_running_on_gpu_errors(cc: &eframe::CreationContext<'_>, paths: &Paths) {
+    let Some(render_state) = cc.wgpu_render_state.as_ref() else { return };
+    let side = render_state.device.limits().max_texture_dimension_2d as f32 / cc.egui_ctx.pixels_per_point();
+    cc.egui_ctx.send_viewport_cmd(egui::ViewportCommand::MaxInnerSize(egui::vec2(side, side)));
+    let log = paths.log.clone();
+    render_state.device.on_uncaptured_error(std::sync::Arc::new(move |e: eframe::wgpu::Error| {
+        let line = format!("GPU error, ignored: {e}");
+        eprintln!("{line}");
+        config::log_line(&log, &line.replace('\n', " "));
+    }));
 }
 
 /// The screen shown.
