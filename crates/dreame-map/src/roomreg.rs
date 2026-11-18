@@ -291,6 +291,15 @@ pub struct Removed {
 /// neighbour pairs are added: the lists do not follow grid adjacency exactly, and the robot
 /// recomputes them after a run (W29).
 pub fn remove_room(a: &mut Archive, s: &Segmentation, room: u8, into: u8) -> Result<Removed> {
+    if into == room || !seg_info_rooms(a)?.contains(&into) {
+        return Err(Error::Unsupported(format!("room {into} is not in seg_info")));
+    }
+    forget_room(a, s, room)
+}
+
+/// Takes room `room`, which has no cells left in the grid of `s`, out of the room lists, like
+/// [`remove_room`]. Used when an erase leaves a room without floor.
+pub fn forget_room(a: &mut Archive, s: &Segmentation, room: u8) -> Result<Removed> {
     if s.room_sizes().contains_key(&room) {
         return Err(Error::Unsupported(format!("room {room} still has cells in the grid")));
     }
@@ -298,9 +307,6 @@ pub fn remove_room(a: &mut Archive, s: &Segmentation, room: u8, into: u8) -> Res
     let mut l = Lists::read(a)?;
     if l.seg.remove(&r).is_none() {
         return Err(Error::Unsupported(format!("room {room} is not in seg_info")));
-    }
-    if !l.seg.contains_key(&into.to_string()) {
-        return Err(Error::Unsupported(format!("room {into} is not in seg_info")));
     }
     for e in l.seg.values_mut() {
         if let Some(nei) = e.get_mut("nei_id") {

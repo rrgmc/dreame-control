@@ -500,6 +500,13 @@ enum ArchiveEditCmd {
     /// Move every cell of ROOM to its neighbour INTO and take ROOM out of the room lists
     /// (`seg_info`, cleaning order, neighbour table, AI room list, hidden rooms). Research (W31).
     RemoveRoom { room: u8, into: u8 },
+    /// Make the floor cells inside the rectangle (X0, Y0)-(X1, Y1), in world mm, outside every
+    /// room. A room left without cells is taken out of the room lists. The robot loads it
+    /// (W34); it may rebuild the floor from what it senses on a later run.
+    #[command(allow_negative_numbers = true)]
+    Erase { x0: f64, y0: f64, x1: f64, y1: f64 },
+    /// Erase every floor cell of ROOM, like `erase`, and take ROOM out of the room lists.
+    EraseRoom { room: u8 },
     /// Mark the grid cells on a straight line from (X0, Y0) to (X1, Y1), in world mm, as wall.
     /// Room ids and carpet flags stay. The robot drives through these walls and clears them
     /// after its next cleaning run (W23); block a door with a virtual wall instead.
@@ -562,6 +569,8 @@ impl ArchiveEditCmd {
                 GridEdit::PaintNewRoom { new, parent, points: cell_centres(x0, y0, x1, y1), meta: meta.to_meta()? }
             }
             Self::RemoveRoom { room, into } => GridEdit::RemoveRoom { room, into },
+            Self::Erase { x0, y0, x1, y1 } => GridEdit::Erase { points: cell_centres(x0, y0, x1, y1) },
+            Self::EraseRoom { room } => GridEdit::EraseRoom { room },
             Self::Wall { x0, y0, x1, y1, clear } => GridEdit::Wall { from: (x0, y0), to: (x1, y1), wall: !clear },
         })
     }
@@ -823,6 +832,9 @@ async fn cmd_edit_archive(robot: &CloudRobot, edit: ArchiveEditCmd, apply: bool,
     if !edit.rooms().is_empty() {
         println!("before: {}", archiveedit::room_sizes(&source, &edit.rooms())?);
         println!("after:  {}", archiveedit::room_sizes(&edited, &edit.rooms())?);
+    }
+    if matches!(edit, archiveedit::GridEdit::Erase { .. } | archiveedit::GridEdit::EraseRoom { .. }) {
+        println!("rooms changed: {}", archiveedit::changed_rooms(&source, &edited)?);
     }
     let out = dir.join(format!("{}-edited.tbz2", stamp()));
     std::fs::write(&out, &edited)?;

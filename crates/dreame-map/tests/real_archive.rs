@@ -274,3 +274,32 @@ fn new_room_with_name_and_floor() {
         assert!(a.get(n) == base.get(n), "{n} differs after add and remove");
     }
 }
+
+/// Erasing every cell of room 12 leaves it outside in all four images, and forgetting it changes
+/// the room lists exactly as removing it into a neighbour does.
+#[test]
+fn erased_room_is_forgotten() {
+    use dreame_map::roomreg;
+    let Some(backup) = read("recovery/1794937671-backup.tbz2") else { return };
+    let base = Archive::decode(&backup).unwrap();
+    let mut a = base.clone();
+    let mut s = Segmentation::read(&a).unwrap();
+    let size = s.room_sizes()[&12];
+    let cells: Vec<(u32, u32)> =
+        (0..s.height).flat_map(|y| (0..s.width).map(move |x| (x, y))).filter(|&(x, y)| s.room_at(x, y) == Some(12)).collect();
+    let others: Vec<_> = s.room_sizes().into_iter().filter(|(r, _)| *r != 12).collect();
+    assert_eq!(s.erase(&cells).unwrap().cells.len(), size);
+    assert_eq!(s.room_sizes().into_iter().collect::<Vec<_>>(), others, "other rooms keep their cells");
+    s.write(&mut a).unwrap();
+    assert!(roomreg::remove_room(&mut a.clone(), &s, 12, 12).is_err(), "a room cannot go into itself");
+    roomreg::forget_room(&mut a, &s, 12).unwrap();
+
+    let mut b = base.clone();
+    let mut t = Segmentation::read(&b).unwrap();
+    t.remove(12, 10).unwrap();
+    t.write(&mut b).unwrap();
+    roomreg::remove_room(&mut b, &t, 12, 10).unwrap();
+    for n in [roomreg::DAT2, roomreg::NEIGHBOURS, roomreg::AI_ROOMS, roomreg::AI_FLOORS, roomreg::HIDDEN] {
+        assert!(a.get(n) == b.get(n), "{n} differs between erase and remove");
+    }
+}
