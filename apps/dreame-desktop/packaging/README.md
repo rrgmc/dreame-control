@@ -8,6 +8,19 @@ Secrets and variables > Actions): `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_P
 `ANDROID_KEY_ALIAS` and, if it differs from the keystore password, `ANDROID_KEY_PASSWORD`. Without
 them the Android job fails and no release is published.
 
+Also add the macOS signing secrets. The macOS app is signed with a Developer ID certificate and
+notarized by Apple, so Gatekeeper opens it without a warning:
+
+| Secret | Value |
+|---|---|
+| `MACOS_CERTIFICATE_P12` | The "Developer ID Application" certificate with its private key, exported from Keychain Access as a `.p12` file, base64-encoded: `base64 -i cert.p12 \| pbcopy` |
+| `MACOS_CERTIFICATE_PASSWORD` | The password given to the `.p12` file on export |
+| `NOTARY_API_KEY` | An App Store Connect API key: the contents of its `.p8` file. Make one at appstoreconnect.apple.com under Users and Access > Integrations > Team Keys, with the Developer role. |
+| `NOTARY_API_KEY_ID` | That key's ID |
+| `NOTARY_API_ISSUER` | The issuer ID shown above the list of keys |
+ Without these secrets the macOS job
+fails and no release is published.
+
 ```bash
 git tag v0.2.0
 git push origin v0.2.0
@@ -21,18 +34,17 @@ The [release workflow](../../../.github/workflows/release.yml) then builds the d
 |---|---|---|
 | Windows (x64) | `DreameControl-<v>-windows-x64-setup.exe` | Run it. It installs for the current user, so it needs no administrator rights, and adds a Start menu entry. |
 | Windows (x64) | `DreameControl-<v>-windows-x64.zip` | Unpack it and run `Dreame Control.exe`. |
-| macOS (Apple silicon) | `DreameControl-<v>-macos-arm64.dmg` | Open it and drag Dreame Control to Applications. |
-| macOS (Apple silicon) | `DreameControl-<v>-macos-arm64.zip` | The app alone. |
+| macOS (Apple silicon) | `DreameControl-<v>-macos-arm64.dmg` | Open it and drag Dreame Control to Applications. Signed and notarized. |
+| macOS (Apple silicon) | `DreameControl-<v>-macos-arm64.zip` | The app alone, signed and notarized. |
 | Linux (x86_64) | `DreameControl-<v>-linux-x86_64.AppImage` | `chmod +x` the file, then run it. |
 | Linux (x86_64) | `DreameControl-<v>-linux-x86_64.tar.gz` | The program, its icon and a desktop file. |
 | Android | `dreame-control-<v>.apk` | Open it on the phone and allow the install. It is signed with the release key from the repository secrets listed in the workflow. |
 
 ## The first start
 
-The packages are not signed with a paid code-signing certificate, so each system warns once:
+The macOS app is signed with a Developer ID certificate and notarized, so it opens without a warning. The other packages are not signed with a paid code-signing certificate, so those systems warn once:
 
 - **Windows:** SmartScreen says "Windows protected your PC". Choose **More info**, then **Run anyway**.
-- **macOS:** the app is signed ad hoc only. Right-click the app and choose **Open**, or open it once and then allow it under **System Settings > Privacy & Security > Open Anyway**.
 - **Linux:** the AppImage needs the execute permission (`chmod +x`). It uses the system's graphics and keyboard libraries (OpenGL, xkbcommon), which every desktop has.
 
 ## Building a package locally
@@ -43,6 +55,10 @@ Each script builds a release binary and writes the packages into `dist/` at the 
 |---|---|---|
 | Windows | `task app:package -- 0.2.0`, or `powershell -File apps/dreame-desktop/packaging/windows/package.ps1 0.2.0` | Inno Setup 6 |
 | macOS | `bash apps/dreame-desktop/packaging/macos/package.sh 0.2.0` | Xcode command line tools, the Rust target `aarch64-apple-darwin` |
+
+A local macOS build is signed ad hoc unless `DREAME_SIGN_IDENTITY` names a Developer ID Application
+identity in the keychain. To notarize it as well, give an App Store Connect API key; the header
+of `package.sh` lists the variables.
 | Linux | `bash apps/dreame-desktop/packaging/linux/package.sh 0.2.0` | `curl`, and the libraries listed in the workflow |
 
 ## Cost
