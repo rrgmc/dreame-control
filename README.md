@@ -92,10 +92,9 @@ Download the newest version from the [releases page](https://github.com/rrgmc/dr
 
 ### The first start
 
-The packages are not signed with a paid certificate, so each system warns you once:
+The macOS app is signed and notarized by Apple, so it opens without a warning. The other packages are not signed with a paid certificate, so those systems warn you once:
 
 - **Windows:** SmartScreen says "Windows protected your PC". Choose **More info**, then **Run anyway**.
-- **macOS:** right-click the app and choose **Open**. Or open it once, then allow it under **System Settings > Privacy & Security > Open Anyway**.
 - **Android:** the phone asks you to allow installations from the app that opened the APK, such as your browser or file manager.
 
 ## Use

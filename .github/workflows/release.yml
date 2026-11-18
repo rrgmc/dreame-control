@@ -10,6 +10,15 @@
 #   ANDROID_KEY_ALIAS          the key's alias
 #   ANDROID_KEY_PASSWORD       the key's password; may be left unset when it is the same
 # Without the keystore secret the Android job fails rather than publish a debug-signed APK.
+#
+# The macOS app is signed with a Developer ID certificate and notarized by Apple, with these
+# repository secrets:
+#   MACOS_CERTIFICATE_P12_BASE64  the "Developer ID Application" certificate and its private key,
+#                                 exported from Keychain Access as .p12 and base64-encoded
+#   MACOS_CERTIFICATE_PASSWORD    the password of the .p12 file
+#   APPLE_NOTARY_APPLE_ID         the Apple ID of the developer account
+#   APPLE_NOTARY_PASSWORD         an app-specific password for that Apple ID
+# Without them the macOS job fails rather than publish an app that is not notarized.
 name: Release
 
 on:
@@ -64,9 +73,60 @@ jobs:
           }
           ./apps/dreame-desktop/packaging/windows/package.ps1 $env:VERSION
 
+      # A keychain made for this job holds the certificate and the notarytool profile. Its
+      # password protects a file that is deleted when the job ends, so a random one serves. The
+      # partition list lets codesign use the key without a dialog. The team id is read from the
+      # certificate's name, "Developer ID Application: Name (TEAMID)".
+      - name: Signing keychain (macOS)
+        if: matrix.name == 'macos'
+        env:
+          CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+        run: |
+          for v in CERTIFICATE_P12_BASE64 CERTIFICATE_PASSWORD NOTARY_APPLE_ID NOTARY_PASSWORD; do
+            if [ -z "${!v}" ]; then
+              echo "::error::The macOS signing secrets MACOS_CERTIFICATE_P12_BASE64, MACOS_CERTIFICATE_PASSWORD, APPLE_NOTARY_APPLE_ID and APPLE_NOTARY_PASSWORD are not all set."
+              exit 1
+            fi
+          done
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(openssl rand -hex 24)"
+          printf '%s' "$CERTIFICATE_P12_BASE64" | base64 -d > "$RUNNER_TEMP/signing.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/signing.p12" -k "$keychain" -f pkcs12 -A -P "$CERTIFICATE_PASSWORD"
+          rm -f "$RUNNER_TEMP/signing.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+          # Each keychain already on the search list becomes one argument.
+          # shellcheck disable=SC2046
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity="$(security find-identity -v -p codesigning "$keychain" \
+            | sed -n 's/.*"\(Developer ID Application: .*\)"$/\1/p' | head -1)"
+          if [ -z "$identity" ]; then
+            echo "::error::MACOS_CERTIFICATE_P12_BASE64 holds no Developer ID Application certificate with its private key."
+            exit 1
+          fi
+          team_id="$(printf '%s' "$identity" | sed -n 's/.*(\([A-Z0-9]*\))$/\1/p')"
+          xcrun notarytool store-credentials dreame-control --keychain "$keychain" \
+            --apple-id "$NOTARY_APPLE_ID" --team-id "$team_id" --password "$NOTARY_PASSWORD"
+          {
+            echo "DREAME_SIGN_IDENTITY=$identity"
+            echo "DREAME_NOTARY_PROFILE=dreame-control"
+            echo "DREAME_NOTARY_KEYCHAIN=$keychain"
+          } >> "$GITHUB_ENV"
+
       - name: Package (macOS)
         if: matrix.name == 'macos'
         run: bash apps/dreame-desktop/packaging/macos/package.sh "$VERSION"
+
+      - name: Remove the signing keychain (macOS)
+        if: always() && matrix.name == 'macos'
+        run: |
+          rm -f "$RUNNER_TEMP/signing.p12"
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
 
       - name: Package (Linux)
         if: matrix.name == 'linux'
