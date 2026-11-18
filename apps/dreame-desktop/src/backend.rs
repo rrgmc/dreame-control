@@ -43,8 +43,10 @@ pub enum Msg {
     Done { what: String, result: Result<(), String> },
     /// A map edit finished: the map before it, and the map read back or why it failed.
     Edited { before: Box<dreame_map::Map>, result: Result<Box<LoadedMap>, String> },
-    /// A step of a running advanced edit.
+    /// A step of a running advanced edit, backup or restore.
     Progress(String),
+    /// A backup to a file finished: the file, or why it failed.
+    BackedUp(Result<std::path::PathBuf, String>),
     /// The robot has barely moved for a while in a state where it should move.
     Stall(String),
     /// The schedules, read live from the robot.
@@ -380,6 +382,67 @@ impl Backend {
         });
     }
 
+    /// Backs up the current map on the robot, downloads the backup and writes it to `file`;
+    /// steps arrive as [`Msg::Progress`], the end as [`Msg::BackedUp`]. The map is not changed.
+    pub fn backup_to_file(&self, robot: &SharedRobot, file: std::path::PathBuf) {
+        let (tx, ctx, robot) = (self.tx.clone(), self.ctx.clone(), robot.clone());
+        self.rt.spawn(async move {
+            let send = |m: Msg| {
+                let _ = tx.send(m);
+                ctx.request_repaint();
+            };
+            let result = async {
+                use dreame::mapedit::MapAccess as _;
+                let link = robot.cloud_link();
+                if let Some(b) = link.busy().await? {
+                    anyhow::bail!("{}", trf("the robot is busy ({state}); back up when it is idle", &[("state", &b)]));
+                }
+                let saved = dreame::mapedit::read_saved(link).await?;
+                let map_id = u32::try_from(saved.map.map_id).map_err(|_| anyhow!("the saved map has no valid map id"))?;
+                send(Msg::Progress(tr("backing up the map on the robot").into()));
+                let wait = dreame::recovery::Wait::default();
+                let (_, bytes) = dreame::archiveedit::fresh_backup(&link.client, &link.device, map_id, wait).await?;
+                std::fs::write(&file, &bytes)?;
+                Ok(file)
+            }
+            .await
+            .map_err(|e: anyhow::Error| format!("{e:#}"));
+            send(Msg::BackedUp(result));
+        });
+    }
+
+    /// Replaces the robot's map with the backup in `file` ([`dreame::archiveedit::restore_file`]);
+    /// steps arrive as [`Msg::Progress`], the end as [`Msg::Edited`]. Copies of the map before
+    /// and after go to the app folder's `backups` folder.
+    pub fn restore_from_file(&self, robot: &SharedRobot, before: dreame_map::Map, file: std::path::PathBuf) {
+        let (tx, ctx, robot) = (self.tx.clone(), self.ctx.clone(), robot.clone());
+        let dir = self.paths.dir.join("backups");
+        // The progress callback is not Send, so this runs on a thread of its own.
+        std::thread::spawn(move || {
+            let send = |m: Msg| {
+                let _ = tx.send(m);
+                ctx.request_repaint();
+            };
+            let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+                Ok(rt) => rt,
+                Err(e) => return send(Msg::Edited { before: Box::new(before), result: Err(e.to_string()) }),
+            };
+            let opts = dreame::archiveedit::RestoreOptions { dir, stamp: dreame::session::stamp(), port: GRID_PORT, prime: true };
+            let mut progress = |line: &str| send(Msg::Progress(line.to_string()));
+            let result = rt.block_on(async {
+                let body = std::fs::read(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+                let link = robot.cloud_link();
+                let report =
+                    dreame::archiveedit::restore_file(link, body, &opts, &mut progress).await.map_err(|e| format!("{e:#}"))?;
+                if let Err(e) = &report.settings {
+                    progress(&trf("The room settings could not be put back: {error}", &[("error", e)]));
+                }
+                reload(link).await
+            });
+            send(Msg::Edited { before: Box::new(before), result });
+        });
+    }
+
     /// Follows the robot over MQTT until [`Backend::stop_live`]. Reconnects after a drop.
     pub fn start_live(&mut self, robot: &SharedRobot, map_version: u8) {
         self.stop_live();
@@ -455,7 +518,7 @@ impl Backend {
     }
 }
 
-/// Port the edited map backup is served on to the robot, during an advanced edit.
+/// Port a map archive is served on to the robot, during an advanced edit or a restore.
 const GRID_PORT: u16 = 8770;
 
 async fn reload(link: &CloudRobot) -> Result<Box<LoadedMap>, String> {

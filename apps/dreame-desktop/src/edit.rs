@@ -5,7 +5,8 @@
 //! walls; delete one by clicking it. With advanced editing on (Settings), two tools work
 //! through a backup and restore of the map: "Move a border" redraws the border between two
 //! rooms, and "Delete a room" gives a room's floor to a neighbour and removes the room. Hidden
-//! rooms can be deleted too.
+//! rooms can be deleted too. The same setting adds "Map backup": back up the map to a file, and
+//! restore it from one.
 
 use crate::backend::{Backend, LoadedMap, Msg, SharedRobot};
 use crate::mapview::{Drag, Mark, MapInput, MapView, Overlay};
@@ -17,6 +18,7 @@ use dreame_map::model::Line;
 use dreame_map::path::Path;
 use dreame_map::Map;
 use eframe::egui::{self, Color32, RichText};
+use std::path::PathBuf;
 
 /// Grid of the robot's map, in mm; drawn shapes snap to it.
 const SNAP_MM: f64 = 50.0;
@@ -94,6 +96,10 @@ pub struct EditMap {
     rename: Option<(u32, String)>,
     /// A hidden area clicked: ask whether to show it again, as the official app does.
     unhide: Option<u32>,
+    /// A backup file picked to restore: ask before replacing the robot's map with it.
+    restore: Option<PathBuf>,
+    /// The running job is a backup to a file, not a save.
+    backing_up: bool,
     saving: bool,
     progress: Vec<String>,
     /// The last save's outcome, shown until the next change.
@@ -116,6 +122,8 @@ impl EditMap {
             problem: None,
             rename: None,
             unhide: None,
+            restore: None,
+            backing_up: false,
             saving: false,
             progress: Vec::new(),
             outcome: None,
@@ -127,6 +135,15 @@ impl EditMap {
         match msg {
             Msg::Progress(line) => {
                 self.progress.push(line);
+                None
+            }
+            Msg::BackedUp(result) => {
+                self.saving = false;
+                self.backing_up = false;
+                self.outcome = Some(match result {
+                    Ok(file) => (trf("The map was backed up to {file}.", &[("file", &file.display())]), false),
+                    Err(e) => (trf("Not backed up: {error}", &[("error", &e)]), true),
+                });
                 None
             }
             Msg::Edited { before, result } => {
@@ -183,7 +200,7 @@ impl EditMap {
         });
 
         egui::Panel::left("tools").resizable(false).exact_size(230.0).show(ui, |ui| {
-            ui.add_enabled_ui(!self.saving && can_edit, |ui| self.toolbox(ui));
+            ui.add_enabled_ui(!self.saving && can_edit, |ui| self.toolbox(ui, backend));
             if !can_edit {
                 ui.add_space(8.0);
                 ui.colored_label(ui.visuals().warn_fg_color, tr("The map can be edited while the robot is not cleaning."));
@@ -258,6 +275,37 @@ impl EditMap {
                 self.unhide = None;
             }
         }
+        if let Some(file) = self.restore.clone() {
+            let mut close = false;
+            let modal = egui::Modal::new(egui::Id::unique("restore")).show(ui.ctx(), |ui| {
+                ui.set_width(360.0);
+                ui.label(RichText::new(tr("Restore the map")).size(17.0).strong());
+                ui.add_space(6.0);
+                let name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                ui.label(trf(
+                    "This replaces the robot's map with the one in {file}: rooms, borders, zones and walls. \
+                     Rooms that are in both keep their cleaning settings. It takes a few minutes.",
+                    &[("file", &name)],
+                ));
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    let b = egui::Button::new(RichText::new(tr("Restore")).color(Color32::WHITE)).fill(crate::ACCENT);
+                    if ui.add(b).clicked() {
+                        self.saving = true;
+                        self.progress.clear();
+                        self.reset();
+                        backend.restore_from_file(&self.robot, self.map.clone(), file.clone());
+                        close = true;
+                    }
+                    if ui.button(tr("Cancel")).clicked() {
+                        close = true;
+                    }
+                });
+            });
+            if close || modal.should_close() {
+                self.restore = None;
+            }
+        }
         if let Some((id, mut name)) = self.rename.take() {
             let mut keep = true;
             let modal = egui::Modal::new(egui::Id::unique("rename")).show(ui.ctx(), |ui| {
@@ -291,7 +339,7 @@ impl EditMap {
         exit
     }
 
-    fn toolbox(&mut self, ui: &mut egui::Ui) {
+    fn toolbox(&mut self, ui: &mut egui::Ui, backend: &Backend) {
         let mut tool = self.tool;
         let mut button = |ui: &mut egui::Ui, t: Tool, label: &str| {
             let b = egui::Button::selectable(tool == t, RichText::new(label).size(15.0)).min_size(egui::vec2(210.0, 30.0));
@@ -318,6 +366,29 @@ impl EditMap {
         if tool != self.tool {
             self.tool = tool;
             self.reset();
+        }
+        if self.advanced {
+            ui.add_space(10.0);
+            ui.label(RichText::new(tr("Map backup")).strong());
+            let size = egui::vec2(210.0, 30.0);
+            if ui.add(egui::Button::new(RichText::new(tr("Back up to a file…")).size(15.0)).min_size(size)).clicked() {
+                let name = format!("dreame-map-{}.tbz2", chrono::Local::now().format("%Y-%m-%d-%H%M"));
+                if let Some(file) = backup_dialog().set_file_name(name).save_file() {
+                    self.reset();
+                    self.saving = true;
+                    self.backing_up = true;
+                    self.progress.clear();
+                    backend.backup_to_file(&self.robot, file);
+                }
+            }
+            if ui.add(egui::Button::new(RichText::new(tr("Restore from a file…")).size(15.0)).min_size(size)).clicked() {
+                if let Some(file) = backup_dialog().pick_file() {
+                    match std::fs::read(&file).map_err(anyhow::Error::from).and_then(|b| dreame::archiveedit::check_archive(&b)) {
+                        Ok(()) => self.restore = Some(file),
+                        Err(e) => self.outcome = Some((trf("This file cannot be restored: {error}", &[("error", &format!("{e:#}"))]), true)),
+                    }
+                }
+            }
         }
         ui.add_space(14.0);
         ui.label(RichText::new(self.tool.hint()).weak());
@@ -477,9 +548,11 @@ impl EditMap {
         if self.saving {
             ui.horizontal(|ui| {
                 ui.spinner();
-                let text = match self.progress.last() {
-                    Some(p) => trf("Saving to the robot: {step}", &[("step", p)]),
-                    None => tr("Saving to the robot. This can take a minute.").into(),
+                let text = match (self.backing_up, self.progress.last()) {
+                    (true, Some(p)) => trf("Backing up the map: {step}", &[("step", p)]),
+                    (true, None) => tr("Backing up the map. This can take a minute.").into(),
+                    (false, Some(p)) => trf("Saving to the robot: {step}", &[("step", p)]),
+                    (false, None) => tr("Saving to the robot. This can take a minute.").into(),
                 };
                 ui.label(text);
             });
@@ -594,6 +667,11 @@ impl EditMap {
     fn room_name(&self, id: u32) -> String {
         self.map.rooms.get(&id).map(|r| r.display_name()).unwrap_or_else(|| trf("Room {id}", &[("id", &id)]))
     }
+}
+
+/// A file dialog for map backups, which are bzip2 tar archives.
+fn backup_dialog() -> rfd::FileDialog {
+    rfd::FileDialog::new().set_title(tr("Map backup")).add_filter(tr("Map backup"), &["tbz2"])
 }
 
 /// The name of a kind of zone or line, as a heading.
