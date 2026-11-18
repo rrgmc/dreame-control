@@ -338,7 +338,7 @@ impl Home {
                     ui.add_space(4.0);
                     if let Some(l) = &self.map {
                         if ui.button(RichText::new(tr("Edit map")).size(15.0)).on_hover_text(tr("Rooms, no-go zones and walls")).clicked() {
-                            self.editor = Some(crate::edit::EditMap::new(self.robot.clone(), l.map.clone(), self.advanced));
+                            self.editor = Some(crate::edit::EditMap::new(self.robot.clone(), l.map.clone(), l.path.clone(), self.advanced));
                         }
                     }
                     if let Some(l) = &self.map {
@@ -422,6 +422,7 @@ impl Home {
                             }],
                             _ => Vec::new(),
                         },
+                        cells: Vec::new(),
                         hidden_labels: false,
                     };
                     let input = self.view.show(ui, &l.map, &coloured, &overlay);

@@ -3,6 +3,8 @@
 //! editor lab share it.
 
 use crate::archiveedit::GridEdit;
+use dreame_map::roomreg::RoomMeta;
+use std::collections::{BTreeMap, BTreeSet};
 use crate::mapedit::Edit;
 use dreame_map::edit::validate;
 use dreame_map::model::{point_in_polygon, CarpetShape, Line, Map, Point, Rect};
@@ -295,46 +297,135 @@ pub fn erase_edit(map: &Map, a: Point, b: Point, snap_mm: f64) -> Option<Erase> 
     Some(Erase { edit: GridEdit::Erase { points }, rect: Some(rect), cells, emptied })
 }
 
-/// A paint built from drawn rectangles by [`paint_edit`].
-#[derive(Debug, Clone, PartialEq)]
+/// Cells staged to change rooms: painted into an existing room, or into a new room cut out of
+/// a parent room ([`GridEdit::Paint`], [`GridEdit::PaintNewRoom`]). Cells are (column, row).
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Paint {
-    pub edit: GridEdit,
-    /// The room that gets the cells.
+    /// The room that gets the cells: an existing room, or the unused id of the new room.
     pub room: u32,
-    /// The rectangles drawn, snapped, in the order drawn.
-    pub rects: Vec<Rect>,
-    /// Floor cells taken per room.
-    pub cells: std::collections::BTreeMap<u32, usize>,
-    /// Rooms the paint takes every cell of. The archive edit refuses such a paint: merging the
-    /// rooms is the way to remove one.
-    pub emptied: Vec<u32>,
+    /// For a new room: the room it is cut out of. The new room takes its type, floor and
+    /// settings, and only its cells can be painted.
+    pub parent: Option<u32>,
+    pub cells: BTreeSet<(usize, usize)>,
 }
 
-/// Gives `room` the saved map's floor cells of other rooms whose centre lies in one of `rects`
-/// ([`GridEdit::Paint`]). `None` when `room` is not a grid room id or the rectangles hold no
-/// cell of another room.
-pub fn paint_edit(map: &Map, room: u32, rects: &[Rect]) -> Option<Paint> {
-    let id = u8::try_from(room).ok()?;
-    let t = map.transform();
-    let mut cells = std::collections::BTreeMap::<u32, usize>::new();
-    let mut sizes = std::collections::BTreeMap::<u32, usize>::new();
-    let mut points = Vec::new();
+impl Paint {
+    /// A paint into existing room `room`.
+    pub fn into_room(room: u32) -> Self {
+        Self { room, ..Self::default() }
+    }
+
+    /// A paint of a new room out of `parent`, with the lowest unused room id. `None` when every
+    /// id is in use.
+    pub fn new_room(map: &Map, parent: u32) -> Option<Self> {
+        Some(Self { room: free_room_id(map)?, parent: Some(parent), ..Self::default() })
+    }
+
+    /// Adds the cells that may change: for a paint into a room, cells of other rooms; for a new
+    /// room, cells of its parent. Returns how many were added.
+    pub fn add(&mut self, map: &Map, cells: impl IntoIterator<Item = (usize, usize)>) -> usize {
+        let before = self.cells.len();
+        for (c, r) in cells {
+            if c >= map.grid.width || r >= map.grid.height {
+                continue;
+            }
+            let Some(from) = map.grid.get(c, r).class.segment().map(u32::from) else { continue };
+            let ok = match self.parent {
+                Some(parent) => from == parent,
+                None => from != self.room,
+            };
+            if ok {
+                self.cells.insert((c, r));
+            }
+        }
+        self.cells.len() - before
+    }
+
+    /// Takes cells back out of the paint.
+    pub fn remove(&mut self, cells: impl IntoIterator<Item = (usize, usize)>) {
+        for c in cells {
+            self.cells.remove(&c);
+        }
+    }
+
+    /// The rooms the cells come from, with a cell count each.
+    pub fn sources(&self, map: &Map) -> BTreeMap<u32, usize> {
+        let mut m = BTreeMap::new();
+        for &(c, r) in &self.cells {
+            if let Some(s) = map.grid.get(c, r).class.segment() {
+                *m.entry(u32::from(s)).or_default() += 1;
+            }
+        }
+        m
+    }
+
+    /// Rooms the paint takes every cell of. The archive edit refuses such a paint: merging the
+    /// rooms is the way to remove one.
+    pub fn emptied(&self, map: &Map) -> Vec<u32> {
+        let mut sizes = BTreeMap::<u32, usize>::new();
+        for r in 0..map.grid.height {
+            for c in 0..map.grid.width {
+                if let Some(s) = map.grid.get(c, r).class.segment() {
+                    *sizes.entry(u32::from(s)).or_default() += 1;
+                }
+            }
+        }
+        self.sources(map).into_iter().filter(|(r, n)| sizes.get(r) == Some(n)).map(|(r, _)| r).collect()
+    }
+
+    /// The edit to send, with the cells' centres in world mm. A new room gets `name` when it is
+    /// not blank. `None` when there are no cells or an id is not a grid room id.
+    pub fn edit(&self, map: &Map, name: Option<&str>) -> Option<GridEdit> {
+        if self.cells.is_empty() {
+            return None;
+        }
+        let room = u8::try_from(self.room).ok()?;
+        let t = map.transform();
+        let points = self.cells.iter().map(|&(c, r)| t.cell_center(c, r)).collect();
+        Some(match self.parent {
+            Some(p) => {
+                let name = name.map(str::trim).filter(|n| !n.is_empty()).map(String::from);
+                let meta = RoomMeta { name, ..Default::default() };
+                GridEdit::PaintNewRoom { new: room, parent: u8::try_from(p).ok()?, points, meta }
+            }
+            None => GridEdit::Paint { room, points },
+        })
+    }
+}
+
+/// The lowest room id that neither the room list nor the grid uses.
+pub fn free_room_id(map: &Map) -> Option<u32> {
+    let mut used: BTreeSet<u32> = map.rooms.keys().copied().collect();
     for r in 0..map.grid.height {
         for c in 0..map.grid.width {
-            let Some(from) = map.grid.get(c, r).class.segment() else { continue };
-            *sizes.entry(u32::from(from)).or_default() += 1;
+            used.extend(map.grid.get(c, r).class.segment().map(u32::from));
+        }
+    }
+    (1..=u32::from(dreame_map::segmap::MAX_ROOM)).find(|id| !used.contains(id))
+}
+
+/// The grid cells whose centre lies in `rect` (world mm).
+pub fn rect_cells(map: &Map, rect: &Rect) -> Vec<(usize, usize)> {
+    let t = map.transform();
+    let mut cells = Vec::new();
+    for r in 0..map.grid.height {
+        for c in 0..map.grid.width {
             let (x, y) = t.cell_center(c, r);
-            if from != id && rects.iter().any(|rect| rect_contains(rect, Point::new(x, y))) {
-                *cells.entry(u32::from(from)).or_default() += 1;
-                points.push((x, y));
+            if rect_contains(rect, Point::new(x, y)) {
+                cells.push((c, r));
             }
         }
     }
-    if points.is_empty() {
-        return None;
-    }
-    let emptied = cells.iter().filter(|(r, n)| sizes.get(r) == Some(n)).map(|(r, _)| *r).collect();
-    Some(Paint { edit: GridEdit::Paint { room: id, points }, room, rects: rects.to_vec(), cells, emptied })
+    cells
+}
+
+/// The grid cells of a square brush of `radius` cells around world point `p`; radius 0 is the
+/// one cell under `p`.
+pub fn brush_cells(map: &Map, p: Point, radius: usize) -> Vec<(usize, usize)> {
+    let Some((c0, r0)) = map.transform().cell_at(p.x, p.y) else { return Vec::new() };
+    let c1 = (c0 + radius).min(map.grid.width.saturating_sub(1));
+    let r1 = (r0 + radius).min(map.grid.height.saturating_sub(1));
+    (r0.saturating_sub(radius)..=r1).flat_map(|r| (c0.saturating_sub(radius)..=c1).map(move |c| (c, r))).collect()
 }
 
 /// The erase of every floor cell of `room`, hidden or not. `None` when the room has no cells.
@@ -607,7 +698,7 @@ mod tests {
     }
 
     #[test]
-    fn paint_takes_cells_of_other_rooms_in_the_rectangles() {
+    fn paint_takes_cells_of_other_rooms() {
         let m = two_rooms();
         let t = m.transform();
         let around = |c, r| {
@@ -615,17 +706,34 @@ mod tests {
             Rect::new(x - 10.0, y - 10.0, x + 10.0, y + 10.0)
         };
         // Column 3 is room 2's left column; column 2 is room 1, which is skipped.
-        let p = paint_edit(&m, 1, &[around(2, 1), around(3, 1), around(3, 2)]).unwrap();
-        let GridEdit::Paint { room: 1, points } = &p.edit else { panic!("expected a paint into room 1: {:?}", p.edit) };
+        let mut p = Paint::into_room(1);
+        let cells: Vec<_> = [around(2, 1), around(3, 1), around(3, 2)].iter().flat_map(|r| rect_cells(&m, r)).collect();
+        assert_eq!(p.add(&m, cells), 2);
+        assert_eq!(p.sources(&m), [(2, 2)].into());
+        assert!(p.emptied(&m).is_empty());
+        let Some(GridEdit::Paint { room: 1, points }) = p.edit(&m, None) else { panic!("expected a paint into room 1") };
         assert_eq!(points.len(), 2);
-        assert_eq!(p.cells, [(2, 2)].into());
-        assert!(p.emptied.is_empty());
-        assert_eq!(p.rects.len(), 3);
-        let all = paint_edit(&m, 1, &[Rect::new(-1000.0, -1000.0, 1000.0, 1000.0)]).unwrap();
-        // Wall cells carry their room too (0x82 is room 2), so the whole map gives all 12.
-        assert_eq!((all.cells, all.emptied), ([(2, 12)].into(), vec![2]));
-        assert!(paint_edit(&m, 1, &[around(1, 1)]).is_none(), "only room 1's own floor");
-        assert!(paint_edit(&m, 1, &[]).is_none());
+        p.remove([(3, 1)]);
+        assert_eq!(p.cells.len(), 1);
+        // Wall cells carry their room too (0x82 is room 2), so the whole map takes all 12.
+        let mut all = Paint::into_room(1);
+        all.add(&m, rect_cells(&m, &Rect::new(-1000.0, -1000.0, 1000.0, 1000.0)));
+        assert_eq!((all.sources(&m), all.emptied(&m)), ([(2, 12)].into(), vec![2]));
+        assert_eq!(Paint::into_room(1).edit(&m, None), None, "no cells");
+        let (x, y) = t.cell_center(0, 0);
+        assert_eq!(brush_cells(&m, Point::new(x, y), 1), [(0, 0), (1, 0), (0, 1), (1, 1)]);
+    }
+
+    #[test]
+    fn a_new_room_takes_only_its_parents_cells() {
+        let m = two_rooms();
+        assert_eq!(free_room_id(&m), Some(3));
+        let mut p = Paint::new_room(&m, 2).unwrap();
+        assert_eq!(p.add(&m, [(2, 1), (3, 1), (4, 1)]), 2, "column 2 is room 1");
+        let Some(GridEdit::PaintNewRoom { new: 3, parent: 2, points, meta }) = p.edit(&m, Some(" Hall ")) else {
+            panic!("expected a new room")
+        };
+        assert_eq!((points.len(), meta.name.as_deref()), (2, Some("Hall")));
     }
 
     #[test]
