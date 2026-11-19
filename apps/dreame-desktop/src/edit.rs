@@ -659,6 +659,12 @@ impl EditMap {
                 self.border_points = vec![a, b];
                 self.finish_border();
             }
+            (Tool::Remove, MapInput::Click(p)) => {
+                // Hidden rooms too: they are often the floor that does not exist.
+                if let Some(r) = self.map.room_at(p) {
+                    self.start_remove(r);
+                }
+            }
             (t, MapInput::Click(p)) if t.paints() && self.room.is_none() => {
                 // Hidden rooms too, as for a merge.
                 if let Some(r) = self.map.room_at(p) {
