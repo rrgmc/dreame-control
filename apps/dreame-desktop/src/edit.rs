@@ -304,17 +304,27 @@ impl EditMap {
                 }
                 ui.add_space(12.0);
                 ui.label(RichText::new(tr("Edit map")).size(18.0).strong());
+                if self.advanced {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.add_enabled_ui(!self.saving && can_edit, |ui| self.backup_buttons(ui, backend));
+                    });
+                }
             });
             ui.add_space(2.0);
         });
 
         egui::Panel::left("tools").resizable(false).exact_size(230.0).show(ui, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.add_enabled_ui(!self.saving && can_edit, |ui| self.toolbox(ui, backend));
+            // What the tool and the selection offer stays in view below the list of tools.
+            egui::Panel::bottom("tool-info").show(ui, |ui| {
+                ui.add_enabled_ui(!self.saving && can_edit, |ui| self.tool_info(ui));
                 if !can_edit {
                     ui.add_space(8.0);
                     ui.colored_label(ui.visuals().warn_fg_color, tr("The map can be edited while the robot is not cleaning."));
                 }
+                ui.add_space(8.0);
+            });
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.add_enabled_ui(!self.saving && can_edit, |ui| self.toolbox(ui));
             });
         });
 
@@ -460,7 +470,7 @@ impl EditMap {
         exit
     }
 
-    fn toolbox(&mut self, ui: &mut egui::Ui, backend: &Backend) {
+    fn toolbox(&mut self, ui: &mut egui::Ui) {
         let mut tool = self.tool;
         let mut button = |ui: &mut egui::Ui, t: Tool, label: &str| {
             let b = egui::Button::selectable(tool == t, RichText::new(label).size(15.0)).min_size(egui::vec2(210.0, 30.0));
@@ -503,30 +513,34 @@ impl EditMap {
             self.tool = tool;
             self.reset();
         }
-        if self.advanced {
-            ui.add_space(10.0);
-            ui.label(RichText::new(tr("Map backup")).strong());
-            let size = egui::vec2(210.0, 30.0);
-            if ui.add(egui::Button::new(RichText::new(tr("Back up to a file…")).size(15.0)).min_size(size)).clicked() {
-                let name = format!("dreame-map-{}.tbz2", chrono::Local::now().format("%Y-%m-%d-%H%M"));
-                if let Some(file) = backup_dialog().set_file_name(name).save_file() {
-                    self.reset();
-                    self.saving = true;
-                    self.backing_up = true;
-                    self.progress.clear();
-                    backend.backup_to_file(&self.robot, file);
-                }
-            }
-            if ui.add(egui::Button::new(RichText::new(tr("Restore from a file…")).size(15.0)).min_size(size)).clicked() {
-                if let Some(file) = backup_dialog().pick_file() {
-                    match std::fs::read(&file).map_err(anyhow::Error::from).and_then(|b| dreame::archiveedit::check_archive(&b)) {
-                        Ok(()) => self.restore = Some(file),
-                        Err(e) => self.outcome = Some((trf("This file cannot be restored: {error}", &[("error", &format!("{e:#}"))]), true)),
-                    }
+        ui.add_space(8.0);
+    }
+
+    /// The map backup buttons, for a right-to-left layout: the first added is the rightmost.
+    fn backup_buttons(&mut self, ui: &mut egui::Ui, backend: &Backend) {
+        if ui.button(tr("Restore from a file…")).clicked() {
+            if let Some(file) = backup_dialog().pick_file() {
+                match std::fs::read(&file).map_err(anyhow::Error::from).and_then(|b| dreame::archiveedit::check_archive(&b)) {
+                    Ok(()) => self.restore = Some(file),
+                    Err(e) => self.outcome = Some((trf("This file cannot be restored: {error}", &[("error", &format!("{e:#}"))]), true)),
                 }
             }
         }
-        ui.add_space(14.0);
+        if ui.button(tr("Back up to a file…")).clicked() {
+            let name = format!("dreame-map-{}.tbz2", chrono::Local::now().format("%Y-%m-%d-%H%M"));
+            if let Some(file) = backup_dialog().set_file_name(name).save_file() {
+                self.reset();
+                self.saving = true;
+                self.backing_up = true;
+                self.progress.clear();
+                backend.backup_to_file(&self.robot, file);
+            }
+        }
+    }
+
+    /// The current tool's hint and options, and what the selection offers.
+    fn tool_info(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(8.0);
         ui.label(RichText::new(self.tool.hint()).weak());
         if self.tool.paints() {
             self.paint_options(ui);
@@ -546,7 +560,9 @@ impl EditMap {
         }
 
         // What the selection offers.
-        ui.add_space(14.0);
+        if self.selected.is_some() {
+            ui.add_space(14.0);
+        }
         match self.selected {
             Some(Selection::Room(id)) => {
                 let name = self.room_name(id);
@@ -658,6 +674,12 @@ impl EditMap {
             (Tool::Border, MapInput::Line(a, b)) => {
                 self.border_points = vec![a, b];
                 self.finish_border();
+            }
+            (Tool::Remove, MapInput::Click(p)) => {
+                // Hidden rooms too: they are often the floor that does not exist.
+                if let Some(r) = self.map.room_at(p) {
+                    self.start_remove(r);
+                }
             }
             (t, MapInput::Click(p)) if t.paints() && self.room.is_none() => {
                 // Hidden rooms too, as for a merge.
