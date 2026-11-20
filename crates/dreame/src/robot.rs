@@ -408,6 +408,11 @@ impl<L: Link> Robot<L> {
     pub async fn set_schedules(&self, slots: &[dreame_model::codec::schedule::ScheduleSlot]) -> Result<Value> {
         self.send(&commands::set_schedules(slots)).await
     }
+
+    /// Deletes the schedule with this id (8.a1). A write: ask first.
+    pub async fn delete_schedule(&self, id: i64) -> Result<Value> {
+        self.send(&commands::delete_schedule(id)).await
+    }
 }
 
 /// Adapts a [`Link`] to discovery's reader.

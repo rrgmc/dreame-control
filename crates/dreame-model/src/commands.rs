@@ -181,6 +181,12 @@ pub fn set_schedules(slots: &[crate::codec::schedule::ScheduleSlot]) -> Command 
     Command::write(PropId::new(8, 2), crate::codec::schedule::encode(slots))
 }
 
+/// 8.a1: delete the schedule with this id. The id goes in as a string (8.3 is a string
+/// property). The robot ignores a slot left out of an 8.2 write, so deleting needs this action.
+pub fn delete_schedule(id: i64) -> Command {
+    Command::action(8, 1, vec![arg(3, id.to_string())])
+}
+
 /// 15.a1: empty the robot's bin into the station.
 pub fn start_auto_empty() -> Command {
     Command::action(15, 1, vec![])
@@ -271,6 +277,14 @@ mod tests {
             Command::Action { id, input } => (*id, input),
             other => panic!("not an action: {other:?}"),
         }
+    }
+
+    #[test]
+    fn delete_schedule_payload() {
+        let c = delete_schedule(4);
+        let (id, input) = action(&c);
+        assert_eq!(id, ActionId::new(8, 1));
+        assert_eq!(input, &vec![json!({"piid": 3, "value": "4"})]);
     }
 
     #[test]
