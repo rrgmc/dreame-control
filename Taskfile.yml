@@ -51,6 +51,16 @@ tasks:
       - task: clippy
       - task: test
 
+  changelog:check:
+    desc: Check the changelog fragments in changelog/unreleased/.
+    cmds:
+      - bash scripts/changelog.sh check
+
+  changelog:release:
+    desc: "Merge the changelog fragments into CHANGELOG.md for a release, e.g. `task changelog:release -- 1.7.0`."
+    cmds:
+      - bash scripts/changelog.sh release {{.CLI_ARGS}}
+
   # The `dreame` tool. Every task below is read-only on the robot.
 
   dreame:

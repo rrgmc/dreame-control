@@ -2,8 +2,9 @@
 # workspace, and a debug build of the Android app. Live and real-capture tests skip themselves,
 # since CI has no account and no captures.
 #
-# A change that touches only documentation (Markdown files, docs/, .gitignore) skips the build
-# jobs. The workflow still starts, so the required checks report as skipped, which GitHub counts as
+# A change that touches only documentation (Markdown files, docs/, changelog/, .gitignore) skips
+# the build jobs, and so does a release commit that changes only the version numbers and the
+# changelog. The workflow still starts, so the required checks report as skipped, which GitHub counts as
 # passed; with paths-ignore they would never report and the pull request could not merge.
 name: CI
 # A pull request run shows the pull request's number after its title. Other runs evaluate to an
@@ -43,15 +44,47 @@ jobs:
             echo "code=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          code=$(git diff --name-only "$BASE...HEAD" | grep -v -E '\.md$|^docs/|^\.gitignore$' || true)
-          if [ -n "$code" ]; then
-            echo "Changed outside the documentation:"
-            echo "$code"
-            echo "code=true" >> "$GITHUB_OUTPUT"
-          else
+          code=$(git diff --name-only "$BASE...HEAD" | grep -v -E '\.md$|^docs/|^changelog/|^\.gitignore$' || true)
+          if [ -z "$code" ]; then
             echo "Only documentation changed; skipping the build jobs."
             echo "code=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          # A release commit raises the version and merges the changelog. Master already passed
+          # the checks, and the release workflow builds everything again from the tag, so it skips
+          # the build jobs too. It counts as one when it touches only the version's files, every
+          # changed line stays the same once its version numbers are blanked out, and every removed
+          # version is the workspace's old version and every added one its new version. The last
+          # rule keeps a dependency upgrade, such as 1.0.200 to 1.0.201, from passing as a release.
+          release_files='^(Cargo\.toml|Cargo\.lock|apps/dreame-android/app/build\.gradle\.kts)$'
+          semver='[0-9]+\.[0-9]+\.[0-9]+'
+          workspace_version() {
+            git show "$1:Cargo.toml" | sed -n '/^\[workspace\.package\]/,/^\[/s/^version = "\(.*\)"/\1/p'
+          }
+          if ! grep -q -v -E "$release_files" <<< "$code"; then
+            old_version=$(workspace_version "$BASE")
+            new_version=$(workspace_version HEAD)
+            changed=$(git diff -U0 "$BASE...HEAD" -- $code | grep -E '^[-+]' | grep -v -E '^(\+\+\+|---) ' || true)
+            removed=$(grep '^-' <<< "$changed" | cut -c2- || true)
+            added=$(grep '^+' <<< "$changed" | cut -c2- || true)
+            old=$(grep -o -E "$semver" <<< "$removed" | sort -u || true)
+            new=$(grep -o -E "$semver" <<< "$added" | sort -u || true)
+            if [ -n "$old_version" ] && [ -n "$new_version" ] && [ "$old_version" != "$new_version" ] \
+              && [ "$old" = "$old_version" ] && [ "$new" = "$new_version" ] \
+              && [ "$(sed -E "s/$semver/V/g" <<< "$removed" | sort)" = "$(sed -E "s/$semver/V/g" <<< "$added" | sort)" ]; then
+              echo "Only the version and the documentation changed; skipping the build jobs."
+              echo "code=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+          echo "Changed outside the documentation:"
+          echo "$code"
+          echo "code=true" >> "$GITHUB_OUTPUT"
+
+      - name: Changelog fragments
+        run: bash scripts/changelog.sh check
 
   rust:
     name: Rust (clippy and tests)
