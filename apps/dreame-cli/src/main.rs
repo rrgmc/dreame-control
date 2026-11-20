@@ -128,6 +128,14 @@ enum Cmd {
     },
     /// List the robot's settings and their current values. Read-only.
     Settings,
+    /// List the schedules (8.2), or delete one with `schedules delete <id>`.
+    Schedules {
+        #[command(subcommand)]
+        action: Option<ScheduleCmd>,
+        /// Send the delete to the robot. Without it, the command is only printed.
+        #[arg(long, global = true)]
+        apply: bool,
+    },
     /// Change one setting. Prints the current value and the writes; nothing is sent without
     /// `--apply`, which then reads the setting back.
     Set {
@@ -1327,6 +1335,40 @@ async fn cmd_settings(c: CloudClient, dev: DeviceInfo) -> Result<()> {
     Ok(())
 }
 
+#[derive(Subcommand, Debug, PartialEq)]
+enum ScheduleCmd {
+    /// Delete the schedule with this id (8.a1), then read the list back.
+    Delete { id: i64 },
+}
+
+async fn cmd_schedules(c: CloudClient, dev: DeviceInfo, action: Option<ScheduleCmd>, apply: bool) -> Result<()> {
+    let robot = Robot::cloud(Arc::new(c), dev);
+    let print = |slots: &[dreame_model::codec::schedule::ScheduleSlot]| {
+        if slots.is_empty() {
+            println!("no schedules");
+        }
+        for s in slots {
+            println!("id {:<3} {} state {} days {} repeat {}", s.id, s.time, s.state, s.weekdays, s.repeat);
+        }
+    };
+    let slots = robot.schedules().await?;
+    print(&slots);
+    let Some(ScheduleCmd::Delete { id }) = action else { return Ok(()) };
+    if !slots.iter().any(|s| s.id == id) {
+        bail!("no schedule with id {id}");
+    }
+    println!("{:?}", dreame_model::commands::delete_schedule(id));
+    if !apply {
+        println!("dry run: add --apply to send");
+        return Ok(());
+    }
+    println!("reply: {}", robot.delete_schedule(id).await?);
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    println!("after:");
+    print(&robot.schedules().await?);
+    Ok(())
+}
+
 async fn cmd_set(c: CloudClient, dev: DeviceInfo, cmd: &SetCmd, apply: bool) -> Result<()> {
     let mut robot = Robot::cloud(Arc::new(c), dev);
     // Discovery first, so a property the robot lacks is refused before anything is sent.
@@ -1579,6 +1621,11 @@ async fn run() -> Result<()> {
             let dev = pick_device(&c, cli.did.as_deref()).await?;
             cmd_settings(c, dev).await?;
         }
+        Cmd::Schedules { action, apply } => {
+            let c = ctx.client().await?;
+            let dev = pick_device(&c, cli.did.as_deref()).await?;
+            cmd_schedules(c, dev, action, apply).await?;
+        }
         Cmd::Set { setting, apply } => {
             let c = ctx.client().await?;
             let dev = pick_device(&c, cli.did.as_deref()).await?;
@@ -1696,6 +1743,14 @@ mod tests {
         assert!(matches!(c.cmd, Cmd::Control { action: ControlCmd::CleanZone { x0: -500.0, .. }, apply: false }));
         let c = Cli::try_parse_from(["dreame", "control", "go-to", "-1200", "350"]).unwrap();
         assert!(matches!(c.cmd, Cmd::Control { action: ControlCmd::GoTo { x: -1200.0, y: 350.0 }, apply: false }));
+    }
+
+    #[test]
+    fn schedules_parse_and_default_to_dry_run() {
+        let c = Cli::try_parse_from(["dreame", "schedules"]).unwrap();
+        assert!(matches!(c.cmd, Cmd::Schedules { action: None, apply: false }));
+        let c = Cli::try_parse_from(["dreame", "schedules", "delete", "2", "--apply"]).unwrap();
+        assert!(matches!(c.cmd, Cmd::Schedules { action: Some(ScheduleCmd::Delete { id: 2 }), apply: true }));
     }
 
     #[test]

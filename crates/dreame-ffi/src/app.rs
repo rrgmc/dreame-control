@@ -1094,14 +1094,17 @@ impl HomeRobot {
         self.inner.write_schedules(slots).await
     }
 
-    /// Deletes a schedule. A write: the whole list is sent.
+    /// Deletes a schedule with the robot's delete action (8.a1), because the robot ignores a
+    /// schedule left out of a list write. A write. Fails if the schedule is still there after.
     pub async fn delete_schedule(&self, index: u32) -> Result<Vec<Schedule>> {
-        let mut slots = self.inner.slots();
-        if index as usize >= slots.len() {
-            return Err(no_schedule());
+        let id = self.inner.slots().get(index as usize).ok_or_else(no_schedule)?.id;
+        self.inner.robot().delete_schedule(id).await?;
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let out = self.inner.read_schedules().await?;
+        if self.inner.slots().iter().any(|s| s.id == id && !s.invalid()) {
+            return Err(DreameError::Other { detail: "the robot kept the schedule".into() });
         }
-        slots.remove(index as usize);
-        self.inner.write_schedules(slots).await
+        Ok(out)
     }
 
     /// Adds a schedule of chosen rooms (`index` `None`) or changes one. A write: the whole

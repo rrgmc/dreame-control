@@ -302,6 +302,10 @@ aiid 1 LOCATE (beep). aiid 2 PLAY_SOUND. N says both are verified.
 
 aiid 1 DELETE_SCHEDULED_TASK, aiid 2 DELETE_CRUISE_SCHEDULE, aiid 3 DELETE_PET_CRUISE_SCHEDULE.
 
+**Verified on r2579a, 2026-11-20**: writing 8.2 without a slot does not delete it; the robot
+answers code 0 and keeps the slot. Deleting needs aiid 1 with `in` `[{piid: 3, value: "<id>"}]`
+(the id as a string). The robot answered code 0 and the slot was gone from 8.2 two seconds later.
+
 ### 2.9 Consumables (one service each)
 
 Each service has p1 and p2 (time left and percent left; **the order varies**) and aiid 1 = reset.
