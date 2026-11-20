@@ -32,9 +32,9 @@ android {
         applicationId = "dev.dreame.control"
         minSdk = 26
         targetSdk = 36
-        // The release workflow sets both from the version tag; a local build is 1.5.0.
+        // The release workflow sets both from the version tag; a local build is 1.6.0.
         versionCode = System.getenv("DREAME_VERSION_CODE")?.toIntOrNull() ?: 1
-        versionName = System.getenv("DREAME_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.5.0"
+        versionName = System.getenv("DREAME_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.6.0"
     }
 
     signingConfigs {
