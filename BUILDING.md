@@ -94,4 +94,4 @@ See [RUST.md](RUST.md) for the tests that need a real account or real captures.
 
 ## Releases
 
-Pushing a version tag such as `v0.2.0` runs the release workflow. It builds the desktop packages for Windows, macOS and Linux and the signed Android APK, and publishes them as a GitHub release. See [apps/dreame-desktop/packaging/README.md](apps/dreame-desktop/packaging/README.md) for the signing secrets the workflow needs.
+Pushing a version tag such as `v0.2.0` runs the release workflow. It builds the desktop packages for Windows, macOS and Linux and the signed Android APK, and publishes them as a GitHub release. See [apps/dreame-desktop/packaging/README.md](apps/dreame-desktop/packaging/README.md) for the signing secrets the workflow needs, and [RELEASE.md](RELEASE.md) for the steps of a release, including the changelog.

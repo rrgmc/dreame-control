@@ -29,6 +29,8 @@ Dreame Control, an open replacement for the Dreamehome app: a Rust library for D
 | `apps/dreame-android` | Dreame Control for Android, the end-user app (Compose) on `dreame-ffi`'s `app` API; build with `task android` or `task android:release` |
 | `tools/dreame-lab-editor` | Lab map editor (egui) for trying features before they reach the apps |
 | `tools/dreame-lab-android` | Android lab app on `dreame-ffi`; build with `task lab:android` |
+| `changelog/` | Unreleased changelog fragments, merged into `CHANGELOG.md` on release |
+| `scripts/` | Repository scripts, such as `changelog.sh` |
 | `docs/research/` | Protocol, device model and map research |
 | `local/` | Git-ignored: credentials (`local/env`), captures and outputs (`local/out/`), reference clones, APK analysis |
 
@@ -38,4 +40,5 @@ Dreame Control, an open replacement for the Dreamehome app: a Rust library for D
 - Credentials come from `local/env` (`DREAME_USER_EMAIL`, `DREAME_PASSWORD`, `DREAME_REGION`, `DREAME_IP`). Never print or commit them, or the device id, account id, serial, MAC, IP or room names.
 - Live tests run only with `DREAME_LIVE=1`. Tests on real captures run only when `DREAME_FIXTURES` points at `local/out/`.
 - Do not cite or copy tasshack's paid card code (see docs/research/sources.md).
+- A change that users notice adds a fragment to `changelog/unreleased/` (see [changelog/README.md](changelog/README.md)). Do not edit `CHANGELOG.md` directly; a release merges the fragments into it (see [RELEASE.md](RELEASE.md)).
 - `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` (`task check`) must pass before each commit. The CI workflow runs the same checks on every push to `master` and every pull request.

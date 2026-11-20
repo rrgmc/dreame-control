@@ -3,6 +3,8 @@
 #   git tag v0.2.0
 #   git push origin v0.2.0
 # Nothing runs on ordinary pushes. The release takes the tag's name; the packages take its number.
+# The release notes are the version's section of CHANGELOG.md; the workflow stops at once when the
+# section is missing. See RELEASE.md.
 #
 # The Android APK is signed with the release key from these repository secrets:
 #   ANDROID_KEYSTORE_BASE64    the keystore file, base64-encoded
@@ -30,8 +32,23 @@ permissions:
   contents: write
 
 jobs:
+  # Fails at once, before the long builds, when CHANGELOG.md has no section for the tag's version.
+  changelog:
+    name: Changelog section
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Section for the version
+        run: |
+          if ! bash scripts/changelog.sh notes "$GITHUB_REF_NAME"; then
+            echo "::error::CHANGELOG.md has no section for ${GITHUB_REF_NAME#v}. Merge the fragments with 'task changelog:release' in the release commit."
+            exit 1
+          fi
+
   build:
     name: Build (${{ matrix.name }})
+    needs: changelog
     strategy:
       fail-fast: false
       matrix:
@@ -142,6 +159,7 @@ jobs:
 
   android:
     name: Build (android)
+    needs: changelog
     runs-on: ubuntu-latest
     env:
       # The NDK the local builds use (task android:libs).
@@ -230,10 +248,17 @@ jobs:
     needs: [build, android]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
+
       - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
+
+      # The notes are the version's section of CHANGELOG.md, followed by GitHub's list of the
+      # merged pull requests. The changelog job has already checked that the section exists.
+      - name: Release notes from the changelog
+        run: bash scripts/changelog.sh notes "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
 
       - name: Create the release
         env:
@@ -242,4 +267,5 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/* \
             --repo "$GITHUB_REPOSITORY" \
             --title "Dreame Control $GITHUB_REF_NAME" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
             --generate-notes
